@@ -499,7 +499,16 @@ export default function App() {
       </AnimatePresence>
 
       <header className="p-6 flex justify-between items-center sticky top-0 bg-gradient-to-b from-[#031123] to-[#031123]/80 backdrop-blur-xl z-50 border-b border-white/5">
-        <h1 className="text-2xl font-black italic tracking-tighter uppercase drop-shadow-md">P-PRO <span className="text-[#FFCA28]">OS</span></h1>
+        <div className="flex items-center gap-3">
+          <img 
+            src="/p-pro-s.png" 
+            alt="P-PRO Logo" 
+            className="h-9 w-auto object-contain drop-shadow-[0_0_12px_rgba(255,202,40,0.3)]" 
+          />
+          <h1 className="text-2xl font-black italic tracking-tighter uppercase drop-shadow-md text-white mt-0.5">
+            P-PRO <span className="text-[#FFCA28]">OS</span>
+          </h1>
+        </div>
         <div className="flex gap-2">
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }} className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isAdmin ? 'bg-gradient-to-tr from-[#F57C00] to-[#FFCA28] shadow-[0_0_15px_rgba(245,124,0,0.5)] text-[#031123]' : 'bg-white/5 opacity-40 text-white'}`}>
             {isAdmin ? <Unlock size={18}/> : <Lock size={18}/>}
