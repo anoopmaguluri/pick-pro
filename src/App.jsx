@@ -9,22 +9,28 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // --- PREMIUM UI HELPERS ---
 const avatarGradients = [
-  "from-pink-500 to-rose-600",
-  "from-violet-500 to-indigo-600",
-  "from-blue-400 to-cyan-600",
-  "from-teal-400 to-emerald-600",
-  "from-amber-400 to-orange-600"
+  "from-pink-500 to-rose-600", "from-violet-500 to-indigo-600", "from-blue-400 to-cyan-600",
+  "from-teal-400 to-emerald-600", "from-amber-400 to-orange-600", "from-red-500 to-red-700",
+  "from-fuchsia-500 to-purple-700", "from-sky-400 to-blue-700", "from-lime-400 to-green-700",
+  "from-yellow-400 to-amber-600", "from-emerald-400 to-teal-700", "from-cyan-400 to-sky-600",
+  "from-purple-500 to-pink-600", "from-rose-400 to-red-600", "from-orange-500 to-red-600"
 ];
 
 const getGradient = (name) => {
+  if (!name) return avatarGradients[0];
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < name.length; i++) {
+    // Added a salt based on the first character to force massive variance
+    hash = name.charCodeAt(i) + ((hash << 5) - hash) + (name.charCodeAt(0) * 13);
+  }
   return avatarGradients[Math.abs(hash) % avatarGradients.length];
 };
 
 const PlayerAvatar = ({ name, className = "" }) => (
-  <div className={`flex items-center justify-center rounded-full text-white font-black shadow-lg bg-gradient-to-br ${getGradient(name)} ${className}`}>
-    {name.charAt(0).toUpperCase()}
+  <div className={`relative flex items-center justify-center rounded-full text-white font-black bg-gradient-to-br ${getGradient(name)} ${className} shadow-[0_0_10px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.4),inset_0_-3px_4px_rgba(0,0,0,0.3)] ring-1 ring-white/20`}>
+    <span className="drop-shadow-[0_2px_2px_rgba(0,0,0,0.6)] z-10">{name.charAt(0).toUpperCase()}</span>
+    {/* Inner futuristic glow ring */}
+    <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none" />
   </div>
 );
 
@@ -83,10 +89,25 @@ export default function App() {
 
   const addPlayer = (e) => {
     e?.preventDefault();
-    if (!newPlayer.trim()) return;
-    triggerHaptic(50);
+    const pName = newPlayer.trim();
+    if (!pName) return;
+
     const players = data?.players || [];
-    set(ref(db, 'tournament/players'), [...players, newPlayer.trim()]);
+    
+    // --- DUPLICATE CHECKER ---
+    if (players.some(p => p.toLowerCase() === pName.toLowerCase())) {
+      triggerHaptic([50, 50, 100]); // Error vibration
+      return showAlert(
+        "Duplicate Player", 
+        `"${pName}" is already in the roster. Please add a last initial (e.g., "${pName} S.").`, 
+        () => setModal({ show: false }), 
+        "Got it", 
+        false
+      );
+    }
+
+    triggerHaptic(50);
+    set(ref(db, 'tournament/players'), [...players, pName]);
     setNewPlayer('');
   };
 
@@ -115,26 +136,44 @@ export default function App() {
     triggerHaptic([100, 50, 100]);
 
     if (players.length % 2 !== 0) {
+      // --- FAIR-PLAY MIXER ALGORITHM ---
       const matches = [];
-      const shuffled = [...players].sort(() => 0.5 - Math.random());
       let matchId = 0;
-      for (let i = 0; i < shuffled.length - 3; i++) {
-        for (let j = i + 1; j < shuffled.length - 2; j++) {
-          for (let k = j + 1; k < shuffled.length - 1; k++) {
-            for (let l = k + 1; l < shuffled.length; l++) {
-              if (matchId > (players.length * 2)) break; 
-              matches.push({
-                id: matchId++,
-                tA: { name: `${shuffled[i]} & ${shuffled[j]}`, p1: shuffled[i], p2: shuffled[j] },
-                tB: { name: `${shuffled[k]} & ${shuffled[l]}`, p1: shuffled[k], p2: shuffled[l] },
-                sA: 0, sB: 0, done: false
-              });
-            }
-          }
-        }
+      
+      // Track how many games each player has been assigned
+      let playCounts = {};
+      players.forEach(p => playCounts[p] = 0);
+
+      // Generating exactly N matches ensures EVERY player gets exactly 4 games
+      const totalMatches = players.length; 
+
+      for (let m = 0; m < totalMatches; m++) {
+        // 1. Shuffle players first so ties are broken randomly
+        let availablePlayers = [...players].sort(() => 0.5 - Math.random());
+        
+        // 2. Sort players by who has played the fewest games
+        availablePlayers.sort((a, b) => playCounts[a] - playCounts[b]);
+        
+        // 3. Draft the 4 players who need a game the most
+        const selected = availablePlayers.slice(0, 4);
+        
+        // 4. Update their play counts
+        selected.forEach(p => playCounts[p]++);
+        
+        // 5. Randomly pair them up for the court
+        const court = selected.sort(() => 0.5 - Math.random());
+        
+        matches.push({
+          id: matchId++,
+          tA: { name: `${court[0]} & ${court[1]}`, p1: court[0], p2: court[1] },
+          tB: { name: `${court[2]} & ${court[3]}`, p1: court[2], p2: court[3] },
+          sA: 0, sB: 0, done: false
+        });
       }
-      update(ref(db, 'tournament/'), { format: 'mixer', pools: 1, players, matches: matches.sort(() => 0.5 - Math.random()), status: 'active' });
+      
+      update(ref(db, 'tournament/'), { format: 'mixer', pools: 1, players, matches, status: 'active' });
     } else {
+      // FIXED TEAMS (Even Players)
       const shuffled = [...players].sort(() => 0.5 - Math.random());
       const teams = [];
       for (let i = 0; i < shuffled.length; i += 2) {
@@ -309,7 +348,7 @@ export default function App() {
       const totalTeams = poolStats.length;
       poolStats.forEach(t => { 
         t.maxPts = t.pts + (t.rem * 2); 
-        t.form = t.form.slice(-4); // Keep only last 4 games for UI space
+        t.form = t.form.slice(-4); 
       });
       const allDone = poolStats.every(t => t.rem === 0);
       
@@ -394,17 +433,18 @@ export default function App() {
     setActiveTab('matches');
   };
 
-  // --- REBUILT LIVE SHUFFLING TABLE ---
+  // --- REBUILT PRO TABLE (Ultra-Clean Leaderboard) ---
   const renderTable = (tableStandings, title = null) => (
     <div className="bg-gradient-to-br from-white/[0.05] to-transparent border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl mb-8">
       {title && <div className="bg-gradient-to-r from-[#FFCA28]/20 to-transparent p-3 pl-6 text-[#FFCA28] font-black uppercase text-[10px] tracking-widest border-b border-white/10">{title}</div>}
       
       {/* Table Header */}
-      <div className="grid grid-cols-[1fr_2rem_2rem_2.5rem] gap-2 p-4 pb-2 border-b border-white/5 bg-black/20 text-[9px] font-black text-slate-500 uppercase px-6">
-        <div>{data.format === 'mixer' ? 'Player' : 'Team'}</div>
-        <div className="text-center">W</div>
-        <div className="text-center text-[#FFCA28]">Pts</div>
-        <div className="text-right">PD</div>
+      <div className="flex items-center px-4 sm:px-6 py-3 border-b border-white/5 bg-black/20 text-[9px] font-black text-slate-500 uppercase">
+        <div className="flex-1 pr-2 pl-1">Team</div>
+        <div className="w-8 text-center">P</div>
+        <div className="w-8 text-center">W</div>
+        <div className="w-12 text-center text-[#FFCA28]">Pts</div>
+        <div className="w-10 text-right">PD</div>
       </div>
 
       {/* Shuffling Rows using layout */}
@@ -414,7 +454,6 @@ export default function App() {
             const isQ = t.status === 'Q';
             const isE = t.status === 'E';
             const rowClass = isQ ? 'bg-green-500/10' : (isE ? 'opacity-40 grayscale' : (i === 0 ? 'bg-gradient-to-r from-[#FFCA28]/10 to-transparent' : 'bg-transparent'));
-            const badgeClass = isQ ? 'bg-green-500 text-[#031123] shadow-[0_0_10px_rgba(74,222,128,0.4)]' : (isE ? 'bg-red-500/80 text-white' : 'bg-white/10 text-white border border-white/10');
             const badgeText = isQ ? 'Q' : (isE ? 'E' : (i + 1));
             
             return (
@@ -422,27 +461,62 @@ export default function App() {
                 layout 
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 key={t.name} 
-                className={`grid grid-cols-[1fr_2rem_2rem_2.5rem] gap-2 p-4 items-center border-b border-white/5 last:border-0 transition-colors px-6 ${rowClass}`}
+                className={`flex items-center px-4 sm:px-6 py-4 border-b border-white/5 last:border-0 transition-colors ${rowClass}`}
               >
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <span className={`min-w-[20px] h-5 px-1 rounded flex items-center justify-center text-[8px] font-black ${badgeClass}`}>
-                    {badgeText}
-                  </span>
+                {/* TEAM INFO COLUMN */}
+                <div className="flex-1 flex items-center gap-3 overflow-hidden pr-2">
                   
-                  {/* Dynamic Avatars & Form */}
-                  <div className="flex flex-col">
-                    <span className="text-xs uppercase italic font-black tracking-tighter truncate text-white">{t.name}</span>
-                    <div className="flex gap-1 mt-1">
-                      {t.form.length > 0 ? t.form.map((res, fIdx) => (
-                        <div key={fIdx} className={`w-1.5 h-1.5 rounded-full ${res === 'W' ? 'bg-green-400' : 'bg-red-500'}`} />
-                      )) : <span className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">No Games</span>}
+                  {/* Ultra-Clean Rank Indicator */}
+                  {isQ || isE ? (
+                    <span className={`w-5 h-5 rounded-[4px] flex items-center justify-center text-[9px] font-black shrink-0 ${isQ ? 'bg-green-500 text-[#031123] shadow-[0_0_10px_rgba(74,222,128,0.4)]' : 'bg-red-500/80 text-white'}`}>
+                      {badgeText}
+                    </span>
+                  ) : (
+                    <span className="w-5 text-center text-[12px] font-black text-slate-500 shrink-0">
+                      {badgeText}
+                    </span>
+                  )}
+                  
+                  {/* Dynamic Avatars */}
+                  <div className="flex -space-x-2 shrink-0">
+                    {t.p1 ? (
+                      <>
+                        <PlayerAvatar name={t.p1} className="w-8 h-8 text-[11px] z-10 shadow-[2px_0_8px_rgba(0,0,0,0.6)]" />
+                          {t.p2 && <PlayerAvatar name={t.p2} className="w-8 h-8 text-[11px] z-0" />}
+                      </>
+                    ) : (
+                      <PlayerAvatar name={t.name} className="w-8 h-8 text-[11px] z-10 shadow-[2px_0_8px_rgba(0,0,0,0.6)]" />
+                    )}
+                  </div>
+
+                  {/* Name & Form Tracker */}
+                  <div className="flex flex-col justify-center min-w-0 py-1">
+                    <span className="text-[11px] sm:text-xs uppercase italic font-black tracking-tighter text-white leading-[1.1] line-clamp-2 whitespace-normal break-words">
+                      {t.name}
+                    </span>
+                    <div className="flex gap-1 mt-1.5">
+                      {t.form.length > 0 ? (
+                        t.form.map((res, fIdx) => (
+                          <div key={fIdx} className={`w-1.5 h-1.5 rounded-full ${res === 'W' ? 'bg-green-400 shadow-[0_0_5px_rgba(74,222,128,0.5)]' : 'bg-red-500'}`} />
+                        ))
+                      ) : (
+                        // Removed "NO GAMES" text. Added elegant placeholder dots.
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="text-center text-sm font-bold text-slate-300">{t.w}</div>
-                <div className="text-center text-lg font-black text-[#FFCA28] drop-shadow-md">{t.pts}</div>
-                <div className="text-right text-xs font-mono font-bold text-slate-400">{t.pd > 0 ? `+${t.pd}` : t.pd}</div>
+                {/* STATS COLUMNS */}
+                <div className="w-8 text-center text-sm font-bold text-slate-400">{t.p}</div>
+                <div className="w-8 text-center text-sm font-bold text-slate-300">{t.w}</div>
+                <div className="w-12 text-center text-xl font-black text-[#FFCA28] drop-shadow-md">{t.pts}</div>
+                <div className="w-10 text-right text-xs font-mono font-bold text-slate-400">{t.pd > 0 ? `+${t.pd}` : t.pd}</div>
+                
               </motion.div>
             );
           })}
@@ -457,7 +531,7 @@ export default function App() {
   const availablePlayers = (data?.players || []).filter(p => !manualTeams.some(t => t.name.includes(p)));
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#0B1E36] via-[#031123] to-[#010812] text-white font-sans selection:bg-[#FFCA28]/30 relative">
+    <div className="max-w-md mx-auto h-[100dvh] flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#0B1E36] via-[#031123] to-[#010812] text-white font-sans selection:bg-[#FFCA28]/30 relative">
       
       {/* CHAMPIONS CELEBRATION */}
       <AnimatePresence>
@@ -498,7 +572,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <header className="p-6 flex justify-between items-center sticky top-0 bg-gradient-to-b from-[#031123] to-[#031123]/80 backdrop-blur-xl z-50 border-b border-white/5">
+      <header className="flex-none p-4 flex justify-between items-center z-50 border-b border-white/5 bg-gradient-to-b from-[#031123] to-[#031123]/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <img 
             src="/p-pro-s.png" 
@@ -521,7 +595,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="p-6 pb-32 h-full overflow-y-auto overflow-x-hidden">
+      <main className="flex-1 p-6 pb-32 overflow-y-auto overflow-x-hidden">
         {isSetupMode ? (
           <div className="space-y-6">
             {!isManualMode ? (
@@ -537,7 +611,7 @@ export default function App() {
                       {data.players.map((p, i) => (
                         <div key={i} className="flex justify-between items-center bg-white/5 pl-2 pr-4 py-2 rounded-xl border border-white/5 text-[10px] font-black uppercase tracking-tighter">
                           <div className="flex items-center gap-2">
-                            <PlayerAvatar name={p} className="w-6 h-6 text-[8px]" />
+                            <PlayerAvatar name={p} className="w-8 h-8 text-[11px] z-0"/>
                             {p}
                           </div>
                           <button onClick={() => removePlayer(i)} className="text-white/20 hover:text-red-400 transition-colors"><Trash2 size={14}/></button>
@@ -578,7 +652,7 @@ export default function App() {
                 <div className="flex flex-wrap gap-2">
                   {availablePlayers.map((p, i) => (
                     <motion.button whileTap={{ scale: 0.95 }} key={i} onClick={() => handleManualSelect(p)} className={`flex items-center gap-2 pl-2 pr-5 py-2 rounded-full border transition-all font-black text-[11px] uppercase shadow-lg ${selectedPlayers.includes(p) ? 'bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123] border-transparent' : 'bg-white/5 border-white/10 text-white'}`}>
-                      <PlayerAvatar name={p} className="w-8 h-8 text-[10px]" />
+                      <PlayerAvatar name={p} className="w-8 h-8 text-[11px] z-0" />
                       {p}
                     </motion.button>
                   ))}
@@ -601,8 +675,11 @@ export default function App() {
                       <h3 className="flex items-center justify-center gap-2 text-[#FFCA28] font-black uppercase tracking-widest text-xs mb-6 mt-2 drop-shadow-md"><Trophy size={14}/> Knockout Stage</h3>
                       {data.knockouts.map((m, idx) => {
                         const isWinnerHighlight = m.id === 'final' && m.done;
-                        const cardClass = isWinnerHighlight ? 'bg-gradient-to-br from-[#FFCA28]/20 to-[#F57C00]/10 border-2 border-[#FFCA28] shadow-[0_0_40px_rgba(255,202,40,0.3)] z-10 scale-[1.02]' : (m.done ? 'opacity-40 grayscale bg-white/5 border border-white/10' : 'bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 shadow-xl');
+                        const cardClass = isWinnerHighlight ? 'bg-gradient-to-br from-[#FFCA28]/20 to-[#F57C00]/10 border-2 border-[#FFCA28] shadow-[0_0_40px_rgba(255,202,40,0.3)] z-10 scale-[1.02]' : (m.done ? 'bg-white/5 border border-white/10' : 'bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 shadow-xl');
                         const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
+                        
+                        const aWon = m.done && m.sA > m.sB;
+                        const bWon = m.done && m.sB > m.sA;
 
                         return (
                           <div key={m.id} className={`relative p-6 rounded-[2.5rem] transition-all duration-500 pt-8 ${cardClass}`}>
@@ -611,11 +688,12 @@ export default function App() {
                             </div>
                             <div className="flex items-center justify-between gap-2 mt-2">
                               
-                              {/* Team A (Avatars + Name) */}
-                              <div className="w-1/3 flex flex-col items-center gap-2">
+                              {/* Team A */}
+                              <div className={`w-1/3 flex flex-col items-center gap-2 relative transition-all ${m.done && !aWon ? 'opacity-40 grayscale scale-95' : ''}`}>
+                                {isWinnerHighlight && aWon && <Crown size={24} className="text-[#FFCA28] absolute -top-8 drop-shadow-md" />}
                                 <div className="flex">
-                                  <PlayerAvatar name={m.tA.p1} className="w-10 h-10 text-[12px] z-10 border-2 border-[#031123]" />
-                                  {m.tA.p2 && <PlayerAvatar name={m.tA.p2} className="w-10 h-10 text-[12px] -ml-4 z-0 border-2 border-[#031123]" />}
+                                  <PlayerAvatar name={m.tA.p1} className="w-8 h-8 text-[11px] z-10 shadow-[2px_0_8px_rgba(0,0,0,0.6)]" />
+                                  {m.tA.p2 && <PlayerAvatar name={m.tA.p2} className="w-8 h-8 text-[11px] z-0" />}
                                 </div>
                                 <p className="text-center text-[9px] font-black uppercase tracking-tighter leading-tight text-white line-clamp-2">{m.tA.name}</p>
                               </div>
@@ -623,19 +701,20 @@ export default function App() {
                               {/* Scores */}
                               <div className={`flex items-center gap-2 bg-black/60 p-1 rounded-2xl border ${isWinnerHighlight ? 'border-[#FFCA28]' : 'border-white/10'}`}>
                                 {isAdmin && (!isTournamentOver || m.id === 'final') ? (
-                                  <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sA === 0 ? "" : m.sA} placeholder="0" onChange={e => updateKnockoutScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none" />
+                                  <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sA === 0 ? "" : m.sA} placeholder="0" onChange={e => updateKnockoutScore(idx, 'A', e.target.value)} className={`w-12 h-12 bg-transparent text-center text-xl font-black outline-none ${m.done && !aWon ? 'text-white/40' : 'text-[#FFCA28]'}`} />
                                 ) : <SpectatorScore score={m.sA} />}
                                 <div className={`h-4 w-px ${isWinnerHighlight ? 'bg-[#FFCA28]' : 'bg-white/20'}`} />
                                 {isAdmin && (!isTournamentOver || m.id === 'final') ? (
-                                  <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sB === 0 ? "" : m.sB} placeholder="0" onChange={e => updateKnockoutScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none" />
+                                  <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sB === 0 ? "" : m.sB} placeholder="0" onChange={e => updateKnockoutScore(idx, 'B', e.target.value)} className={`w-12 h-12 bg-transparent text-center text-xl font-black outline-none ${m.done && !bWon ? 'text-white/40' : 'text-[#FFCA28]'}`} />
                                 ) : <SpectatorScore score={m.sB} />}
                               </div>
 
                               {/* Team B */}
-                              <div className="w-1/3 flex flex-col items-center gap-2">
+                              <div className={`w-1/3 flex flex-col items-center gap-2 relative transition-all ${m.done && !bWon ? 'opacity-40 grayscale scale-95' : ''}`}>
+                                {isWinnerHighlight && bWon && <Crown size={24} className="text-[#FFCA28] absolute -top-8 drop-shadow-md" />}
                                 <div className="flex">
-                                  <PlayerAvatar name={m.tB.p1} className="w-10 h-10 text-[12px] z-10 border-2 border-[#031123]" />
-                                  {m.tB.p2 && <PlayerAvatar name={m.tB.p2} className="w-10 h-10 text-[12px] -ml-4 z-0 border-2 border-[#031123]" />}
+                                  <PlayerAvatar name={m.tB.p1} className="w-8 h-8 text-[11px] z-10 shadow-[2px_0_8px_rgba(0,0,0,0.6)]" />
+                                  {m.tB.p2 && <PlayerAvatar name={m.tB.p2} className="w-8 h-8 text-[11px] z-0" />}
                                 </div>
                                 <p className="text-center text-[9px] font-black uppercase tracking-tighter leading-tight text-white line-clamp-2">{m.tB.name}</p>
                               </div>
@@ -672,35 +751,38 @@ export default function App() {
                     {(data?.matches || []).map((m, idx) => {
                       const lockGroupStage = isTournamentOver || isGroupStageLocked;
                       const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
+                      
+                      const aWon = m.done && m.sA > m.sB;
+                      const bWon = m.done && m.sB > m.sA;
 
                       return (
-                      <motion.div layout key={m.id} className={`relative p-6 rounded-[2.5rem] bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 transition-all ${m.done ? 'opacity-30' : 'shadow-xl'}`}>
+                      <motion.div layout key={m.id} className={`relative p-6 rounded-[2.5rem] bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 transition-all ${m.done ? 'bg-white/5 border-white/10' : 'shadow-xl'}`}>
                         {data.pools === 2 && (
                           <div className="absolute top-0 right-0 bg-gradient-to-bl from-[#F57C00] to-[#FFCA28] text-[#031123] px-3 py-1 rounded-bl-xl rounded-tr-[2.5rem] text-[8px] font-black uppercase tracking-widest shadow-md">Pool {m.pool}</div>
                         )}
                         <div className="flex items-center justify-between gap-2">
                           
-                          {/* Team A (Avatars) */}
-                          <div className="w-1/3 flex flex-col items-center gap-2">
+                          {/* Team A */}
+                          <div className={`w-1/3 flex flex-col items-center gap-2 transition-all ${m.done && !aWon ? 'opacity-40 grayscale scale-95' : ''}`}>
                             <div className="flex">
-                              <PlayerAvatar name={m.tA.p1} className="w-9 h-9 text-[10px] z-10 border-2 border-[#031123]" />
-                              {m.tA.p2 && <PlayerAvatar name={m.tA.p2} className="w-9 h-9 text-[10px] -ml-3 z-0 border-2 border-[#031123]" />}
+                              <PlayerAvatar name={m.tA.p1} className="w-8 h-8 text-[11px] z-10 shadow-[2px_0_8px_rgba(0,0,0,0.6)]" />
+                              {m.tA.p2 && <PlayerAvatar name={m.tA.p2} className="w-8 h-8 text-[11px] z-0" />}
                             </div>
                             <p className="text-center text-[9px] font-black uppercase tracking-tighter leading-tight text-slate-300 line-clamp-2">{m.tA.name}</p>
                           </div>
                           
                           {/* Scores */}
                           <div className="flex items-center gap-2 bg-black/60 p-1 rounded-2xl border border-white/10 mt-2">
-                            {isAdmin && !lockGroupStage ? <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sA === 0 ? "" : m.sA} placeholder="0" onChange={e => updateScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none placeholder:text-white/20" /> : <SpectatorScore score={m.sA} />}
+                            {isAdmin && !lockGroupStage ? <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sA === 0 ? "" : m.sA} placeholder="0" onChange={e => updateScore(idx, 'A', e.target.value)} className={`w-12 h-12 bg-transparent text-center text-xl font-black outline-none placeholder:text-white/20 ${m.done && !aWon ? 'text-white/40' : 'text-[#FFCA28]'}`} /> : <SpectatorScore score={m.sA} />}
                             <div className="h-4 w-px bg-white/20" />
-                            {isAdmin && !lockGroupStage ? <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sB === 0 ? "" : m.sB} placeholder="0" onChange={e => updateScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none placeholder:text-white/20" /> : <SpectatorScore score={m.sB} />}
+                            {isAdmin && !lockGroupStage ? <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sB === 0 ? "" : m.sB} placeholder="0" onChange={e => updateScore(idx, 'B', e.target.value)} className={`w-12 h-12 bg-transparent text-center text-xl font-black outline-none placeholder:text-white/20 ${m.done && !bWon ? 'text-white/40' : 'text-[#FFCA28]'}`} /> : <SpectatorScore score={m.sB} />}
                           </div>
 
-                          {/* Team B (Avatars) */}
-                          <div className="w-1/3 flex flex-col items-center gap-2">
+                          {/* Team B */}
+                          <div className={`w-1/3 flex flex-col items-center gap-2 transition-all ${m.done && !bWon ? 'opacity-40 grayscale scale-95' : ''}`}>
                             <div className="flex">
-                              <PlayerAvatar name={m.tB.p1} className="w-9 h-9 text-[10px] z-10 border-2 border-[#031123]" />
-                              {m.tB.p2 && <PlayerAvatar name={m.tB.p2} className="w-9 h-9 text-[10px] -ml-3 z-0 border-2 border-[#031123]" />}
+                              <PlayerAvatar name={m.tB.p1} className="w-8 h-8 text-[11px] z-10 shadow-[2px_0_8px_rgba(0,0,0,0.6)]" />
+                              {m.tB.p2 && <PlayerAvatar name={m.tB.p2} className="w-8 h-8 text-[11px] z-0" />}
                             </div>
                             <p className="text-center text-[9px] font-black uppercase tracking-tighter leading-tight text-slate-300 line-clamp-2">{m.tB.name}</p>
                           </div>
