@@ -39,6 +39,18 @@ export default function App() {
     setModal({ show: true, title, message, onConfirm: confirmAction });
   };
 
+  // --- SWIPE HANDLER RESTORED ---
+  const handleSwipe = (event, info) => {
+    const swipeThreshold = 60;
+    if (info.offset.x < -swipeThreshold && activeTab === 'matches') {
+      triggerHaptic(30);
+      setActiveTab('standings');
+    } else if (info.offset.x > swipeThreshold && activeTab === 'standings') {
+      triggerHaptic(30);
+      setActiveTab('matches');
+    }
+  };
+
   const addPlayer = (e) => {
     e?.preventDefault();
     if (!newPlayer.trim()) return;
@@ -145,7 +157,6 @@ export default function App() {
     setDismissCelebration(false);
   };
 
-  // --- TYPO-SAFE SCORING LOGIC ---
   const updateScore = (mIdx, team, val) => {
     if (!isAdmin) return;
     triggerHaptic(30);
@@ -153,7 +164,6 @@ export default function App() {
     const cleanStr = val.replace(/[^0-9]/g, ''); 
     const score = cleanStr === "" ? 0 : parseInt(cleanStr); 
     
-    // Updates the score but resets 'done' to false if editing
     const updates = {};
     updates[`tournament/matches/${mIdx}/${team === 'A' ? 'sA' : 'sB'}`] = score;
     updates[`tournament/matches/${mIdx}/done`] = false; 
@@ -175,7 +185,7 @@ export default function App() {
 
     const newKnockouts = [...data.knockouts];
     newKnockouts[idx][team === 'A' ? 'sA' : 'sB'] = score;
-    newKnockouts[idx].done = false; // Reset to false if editing
+    newKnockouts[idx].done = false;
     
     set(ref(db, 'tournament/knockouts'), newKnockouts);
   };
@@ -187,7 +197,6 @@ export default function App() {
     if (newKnockouts[idx].id === 'final') triggerHaptic([200, 100, 200, 100, 500, 100, 800]); 
     else triggerHaptic([100, 50, 100]);
 
-    // Auto-Generate Grand Final
     if ((data.format === 'fixed' || data.pools === 2) && newKnockouts.length === 2) {
       if (newKnockouts[0].done && newKnockouts[1].done) {
         const winner1 = newKnockouts[0].sA > newKnockouts[0].sB ? newKnockouts[0].tA : newKnockouts[0].tB;
@@ -380,7 +389,6 @@ export default function App() {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#031123] text-white font-sans selection:bg-[#FFCB2B]/30 relative">
       
-      {/* CHAMPIONS CELEBRATION */}
       <AnimatePresence>
         {isTournamentOver && !dismissCelebration && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-6 bg-[#031123]/95 backdrop-blur-3xl">
@@ -445,7 +453,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="p-6 pb-32 h-full overflow-y-auto">
+      <main className="p-6 pb-32 h-full overflow-y-auto overflow-x-hidden">
         {isSetupMode ? (
           <div className="space-y-6">
             {!isManualMode ? (
@@ -494,110 +502,117 @@ export default function App() {
             )}
           </div>
         ) : (
-          <AnimatePresence mode="wait">
-            {activeTab === 'matches' ? (
-              <motion.div key="fixtures" initial={{opacity:0, y: 20}} animate={{opacity:1, y: 0}} className="space-y-4">
-                
-                {data?.knockouts && (
-                  <div className="mb-10 space-y-4">
-                    <h3 className="flex items-center justify-center gap-2 text-[#FFCB2B] font-black uppercase tracking-widest text-xs mb-6 mt-2">
-                      <Trophy size={14}/> Knockout Stage
-                    </h3>
-                    {data.knockouts.map((m, idx) => {
-                      const isWinnerHighlight = m.id === 'final' && m.done;
-                      const cardClass = isWinnerHighlight 
-                        ? 'bg-gradient-to-br from-[#FFCB2B]/30 to-black/60 border-2 border-[#FFCB2B] shadow-[0_0_50px_rgba(255,203,43,0.5)] z-10 scale-[1.02]' 
-                        : (m.done ? 'opacity-40 grayscale bg-white/5 border border-white/10' : 'bg-gradient-to-br from-[#FFCB2B]/20 to-transparent border border-[#FFCB2B]/30 shadow-lg');
-                      
-                      const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
+          <motion.div 
+            drag="x" 
+            dragDirectionLock 
+            onDragEnd={handleSwipe} 
+            dragConstraints={{ left: 0, right: 0 }} 
+            dragElastic={0.2} 
+            className="touch-pan-y"
+          >
+            <AnimatePresence mode="wait">
+              {activeTab === 'matches' ? (
+                <motion.div key="fixtures" initial={{opacity:0, x:-20}} animate={{opacity:1, x:0}} exit={{opacity:0, x:-20}} className="space-y-4">
+                  
+                  {data?.knockouts && (
+                    <div className="mb-10 space-y-4">
+                      <h3 className="flex items-center justify-center gap-2 text-[#FFCB2B] font-black uppercase tracking-widest text-xs mb-6 mt-2">
+                        <Trophy size={14}/> Knockout Stage
+                      </h3>
+                      {data.knockouts.map((m, idx) => {
+                        const isWinnerHighlight = m.id === 'final' && m.done;
+                        const cardClass = isWinnerHighlight 
+                          ? 'bg-gradient-to-br from-[#FFCB2B]/30 to-black/60 border-2 border-[#FFCB2B] shadow-[0_0_50px_rgba(255,203,43,0.5)] z-10 scale-[1.02]' 
+                          : (m.done ? 'opacity-40 grayscale bg-white/5 border border-white/10' : 'bg-gradient-to-br from-[#FFCB2B]/20 to-transparent border border-[#FFCB2B]/30 shadow-lg');
+                        
+                        const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
 
-                      return (
-                        <div key={m.id} className={`relative p-6 rounded-[2.5rem] transition-all duration-500 pt-8 ${cardClass}`}>
-                          <div className={`absolute top-0 left-1/2 -translate-x-1/2 px-4 py-1 rounded-b-xl text-[8px] font-black uppercase tracking-widest whitespace-nowrap ${isWinnerHighlight ? 'bg-[#FFCB2B] text-black' : 'bg-white/10 text-white'}`}>
-                            {m.type}
-                          </div>
-                          <div className="flex items-center justify-between gap-4 mt-2">
-                            <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-white">{m.tA.name}</p>
-                            <div className={`flex items-center gap-2 bg-black/60 p-1 rounded-2xl border ${isWinnerHighlight ? 'border-[#FFCB2B]' : 'border-[#FFCB2B]/30'}`}>
-                              <input type="text" inputMode="numeric" disabled={!isAdmin || isTournamentOver} value={m.sA === 0 && isAdmin ? "" : m.sA} placeholder="0" onChange={e => updateKnockoutScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
-                              <div className={`h-4 w-px ${isWinnerHighlight ? 'bg-[#FFCB2B]' : 'bg-[#FFCB2B]/50'}`} />
-                              <input type="text" inputMode="numeric" disabled={!isAdmin || isTournamentOver} value={m.sB === 0 && isAdmin ? "" : m.sB} placeholder="0" onChange={e => updateKnockoutScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                        return (
+                          <div key={m.id} className={`relative p-6 rounded-[2.5rem] transition-all duration-500 pt-8 ${cardClass}`}>
+                            <div className={`absolute top-0 left-1/2 -translate-x-1/2 px-4 py-1 rounded-b-xl text-[8px] font-black uppercase tracking-widest whitespace-nowrap ${isWinnerHighlight ? 'bg-[#FFCB2B] text-black' : 'bg-white/10 text-white'}`}>
+                              {m.type}
                             </div>
-                            <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-white">{m.tB.name}</p>
+                            <div className="flex items-center justify-between gap-4 mt-2">
+                              <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-white">{m.tA.name}</p>
+                              <div className={`flex items-center gap-2 bg-black/60 p-1 rounded-2xl border ${isWinnerHighlight ? 'border-[#FFCB2B]' : 'border-[#FFCB2B]/30'}`}>
+                                <input type="text" inputMode="numeric" disabled={!isAdmin || (isTournamentOver && m.id !== 'final')} value={m.sA === 0 && isAdmin ? "" : m.sA} placeholder="0" onChange={e => updateKnockoutScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                                <div className={`h-4 w-px ${isWinnerHighlight ? 'bg-[#FFCB2B]' : 'bg-[#FFCB2B]/50'}`} />
+                                <input type="text" inputMode="numeric" disabled={!isAdmin || (isTournamentOver && m.id !== 'final')} value={m.sB === 0 && isAdmin ? "" : m.sB} placeholder="0" onChange={e => updateKnockoutScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                              </div>
+                              <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-white">{m.tB.name}</p>
+                            </div>
+                            
+                            {isAdmin && canFinalize && (
+                              <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmKnockout(idx)} className="w-full mt-5 bg-green-500/20 text-green-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border border-green-500/30">
+                                <Check size={14} className="inline mr-1 mb-0.5"/> Finalize Match
+                              </motion.button>
+                            )}
                           </div>
-                          
-                          {/* TYPO-SAFE BUTTON */}
-                          {isAdmin && canFinalize && (
-                            <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmKnockout(idx)} className="w-full mt-5 bg-green-500/20 text-green-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border border-green-500/30">
-                              <Check size={14} className="inline mr-1 mb-0.5"/> Finalize Match
-                            </motion.button>
-                          )}
-                        </div>
-                      )
-                    })}
-                    <div className="w-full h-px bg-white/10 my-8"></div>
-                  </div>
-                )}
-
-                {isAdmin && !data?.knockouts && isKnockoutReady && (
-                  <button onClick={generateKnockouts} className="w-full bg-gradient-to-r from-orange-500 to-[#FFCB2B] text-black py-5 rounded-[2rem] font-black uppercase shadow-2xl mb-6 flex items-center justify-center gap-2 active:scale-95 transition-transform">
-                    <Swords size={18}/> {knockoutButtonText}
-                  </button>
-                )}
-
-                {isAdmin && !data?.knockouts && !isKnockoutReady && data?.matches?.length > 0 && (
-                  <div className="w-full bg-white/5 text-slate-400 py-4 rounded-[2rem] font-bold uppercase text-[10px] tracking-widest text-center mb-6 flex items-center justify-center gap-2 border border-white/5">
-                    <ShieldAlert size={14}/> Complete all matches to advance
-                  </div>
-                )}
-
-                {(data?.matches || []).map((m, idx) => {
-                  const lockGroupStage = isTournamentOver || isGroupStageLocked;
-                  const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
-
-                  return (
-                  <div key={m.id} className={`relative p-6 rounded-[2.5rem] bg-white/5 border border-white/10 transition-all ${m.done ? 'opacity-30' : 'shadow-lg'}`}>
-                    {data.pools === 2 && (
-                       <div className="absolute top-0 right-0 bg-[#FFCB2B]/10 text-[#FFCB2B] px-3 py-1 rounded-bl-xl rounded-tr-[2.5rem] text-[8px] font-black uppercase tracking-widest">
-                         Pool {m.pool}
-                       </div>
-                    )}
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-slate-300">
-                        <span className="text-white">{m.tA.p1}</span><br/>&<br/><span className="text-white">{m.tA.p2}</span>
-                      </p>
-                      <div className="flex items-center gap-2 bg-black/60 p-1 rounded-2xl border border-white/5 mt-2">
-                        <input type="text" inputMode="numeric" disabled={!isAdmin || lockGroupStage} value={m.sA === 0 && isAdmin ? "" : m.sA} placeholder="0" onChange={e => updateScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
-                        <div className="h-4 w-px bg-white/10" />
-                        <input type="text" inputMode="numeric" disabled={!isAdmin || lockGroupStage} value={m.sB === 0 && isAdmin ? "" : m.sB} placeholder="0" onChange={e => updateScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
-                      </div>
-                      <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-slate-300">
-                         <span className="text-white">{m.tB.p1}</span><br/>&<br/><span className="text-white">{m.tB.p2}</span>
-                      </p>
+                        )
+                      })}
+                      <div className="w-full h-px bg-white/10 my-8"></div>
                     </div>
+                  )}
 
-                    {/* TYPO-SAFE BUTTON */}
-                    {isAdmin && canFinalize && (
-                      <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmMatch(idx)} className="w-full mt-5 bg-green-500/20 text-green-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border border-green-500/30">
-                        <Check size={14} className="inline mr-1 mb-0.5"/> Finalize Match
-                      </motion.button>
-                    )}
-                  </div>
-                )})}
-              </motion.div>
-            ) : (
-              <motion.div key="table" initial={{opacity:0, y: 20}} animate={{opacity:1, y: 0}} className="space-y-6">
-                {data?.pools === 2 ? (
-                  <>
-                    {renderTable(standings.filter(t => t.pool === 'A'), 'Group A')}
-                    {renderTable(standings.filter(t => t.pool === 'B'), 'Group B')}
-                  </>
-                ) : (
-                  renderTable(standings)
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  {isAdmin && !data?.knockouts && isKnockoutReady && (
+                    <button onClick={generateKnockouts} className="w-full bg-gradient-to-r from-orange-500 to-[#FFCB2B] text-black py-5 rounded-[2rem] font-black uppercase shadow-2xl mb-6 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                      <Swords size={18}/> {knockoutButtonText}
+                    </button>
+                  )}
+
+                  {isAdmin && !data?.knockouts && !isKnockoutReady && data?.matches?.length > 0 && (
+                    <div className="w-full bg-white/5 text-slate-400 py-4 rounded-[2rem] font-bold uppercase text-[10px] tracking-widest text-center mb-6 flex items-center justify-center gap-2 border border-white/5">
+                      <ShieldAlert size={14}/> Complete all matches to advance
+                    </div>
+                  )}
+
+                  {(data?.matches || []).map((m, idx) => {
+                    const lockGroupStage = isTournamentOver || isGroupStageLocked;
+                    const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
+
+                    return (
+                    <div key={m.id} className={`relative p-6 rounded-[2.5rem] bg-white/5 border border-white/10 transition-all ${m.done ? 'opacity-30' : 'shadow-lg'}`}>
+                      {data.pools === 2 && (
+                         <div className="absolute top-0 right-0 bg-[#FFCB2B]/10 text-[#FFCB2B] px-3 py-1 rounded-bl-xl rounded-tr-[2.5rem] text-[8px] font-black uppercase tracking-widest">
+                           Pool {m.pool}
+                         </div>
+                      )}
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-slate-300">
+                          <span className="text-white">{m.tA.p1}</span><br/>&<br/><span className="text-white">{m.tA.p2}</span>
+                        </p>
+                        <div className="flex items-center gap-2 bg-black/60 p-1 rounded-2xl border border-white/5 mt-2">
+                          <input type="text" inputMode="numeric" disabled={!isAdmin || lockGroupStage} value={m.sA === 0 && isAdmin ? "" : m.sA} placeholder="0" onChange={e => updateScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                          <div className="h-4 w-px bg-white/10" />
+                          <input type="text" inputMode="numeric" disabled={!isAdmin || lockGroupStage} value={m.sB === 0 && isAdmin ? "" : m.sB} placeholder="0" onChange={e => updateScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                        </div>
+                        <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-slate-300">
+                           <span className="text-white">{m.tB.p1}</span><br/>&<br/><span className="text-white">{m.tB.p2}</span>
+                        </p>
+                      </div>
+
+                      {isAdmin && canFinalize && (
+                        <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmMatch(idx)} className="w-full mt-5 bg-green-500/20 text-green-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border border-green-500/30">
+                          <Check size={14} className="inline mr-1 mb-0.5"/> Finalize Match
+                        </motion.button>
+                      )}
+                    </div>
+                  )})}
+                </motion.div>
+              ) : (
+                <motion.div key="table" initial={{opacity:0, x:20}} animate={{opacity:1, x:0}} exit={{opacity:0, x:20}} className="space-y-6">
+                  {data?.pools === 2 ? (
+                    <>
+                      {renderTable(standings.filter(t => t.pool === 'A'), 'Group A')}
+                      {renderTable(standings.filter(t => t.pool === 'B'), 'Group B')}
+                    </>
+                  ) : (
+                    renderTable(standings)
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         )}
       </main>
 
