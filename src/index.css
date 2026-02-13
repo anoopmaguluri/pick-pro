@@ -1,1 +1,15 @@
 @import 'tailwindcss';
+html, body {
+    background-color: #031123; /* Matches your app theme */
+    overscroll-behavior: none; /* Prevents the bounce effect in some browsers */
+    height: 100%;
+    position: fixed; /* Prevents body scroll while allowing internal scroll */
+    width: 100%;
+    overflow: hidden;
+  }
+  
+  #root {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* Smooth iOS scroll */
+  }

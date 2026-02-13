@@ -2,14 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyA96usJJtS7sKrjBhHxH7qFxnUjLmFJPNU',
-  authDomain: 'pickleball-c5563.firebaseapp.com',
-  databaseURL: 'https://pickleball-c5563-default-rtdb.firebaseio.com',
-  projectId: 'pickleball-c5563',
-  storageBucket: 'pickleball-c5563.firebasestorage.app',
-  messagingSenderId: '209441917633',
-  appId: '1:209441917633:web:22a1bad4e9dbb891b66240',
-  measurementId: 'G-K6XZS4ECSN',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DB_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
