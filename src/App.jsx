@@ -7,6 +7,19 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// --- HYPE ENGINE COMPONENT ---
+const SpectatorScore = ({ score }) => (
+  <motion.div
+    key={score}
+    initial={{ scale: 1.8, color: '#4ade80', textShadow: '0px 0px 20px rgba(74,222,128,1)' }}
+    animate={{ scale: 1, color: '#FFCA28', textShadow: '0px 0px 0px rgba(255,202,40,0)' }}
+    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+    className="w-12 h-12 flex items-center justify-center text-xl font-black text-[#FFCA28]"
+  >
+    {score}
+  </motion.div>
+);
+
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -14,7 +27,8 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [newPlayer, setNewPlayer] = useState('');
   
-  const [modal, setModal] = useState({ show: false, title: '', message: '', onConfirm: null });
+  // Upgraded Modal State to support custom text and colors
+  const [modal, setModal] = useState({ show: false, title: '', message: '', onConfirm: null, confirmText: 'Confirm', isDestructive: true });
   const [isManualMode, setIsManualMode] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [manualTeams, setManualTeams] = useState([]);
@@ -35,19 +49,17 @@ export default function App() {
     if (window.navigator?.vibrate) window.navigator.vibrate(pattern);
   };
 
-  const showAlert = (title, message, confirmAction = null) => {
-    setModal({ show: true, title, message, onConfirm: confirmAction });
+  const showAlert = (title, message, confirmAction = null, confirmText = 'Confirm', isDestructive = true) => {
+    setModal({ show: true, title, message, onConfirm: confirmAction, confirmText, isDestructive });
   };
 
-  // --- SWIPE HANDLER RESTORED ---
-  const handleSwipe = (event, info) => {
-    const swipeThreshold = 60;
+  // --- FLUID SCREEN SWIPE ---
+  const handleScreenSwipe = (event, info) => {
+    const swipeThreshold = 50;
     if (info.offset.x < -swipeThreshold && activeTab === 'matches') {
-      triggerHaptic(30);
-      setActiveTab('standings');
+      triggerHaptic(30); setActiveTab('standings');
     } else if (info.offset.x > swipeThreshold && activeTab === 'standings') {
-      triggerHaptic(30);
-      setActiveTab('matches');
+      triggerHaptic(30); setActiveTab('matches');
     }
   };
 
@@ -67,9 +79,26 @@ export default function App() {
     set(ref(db, 'tournament/players'), players);
   };
 
-  const startAutoTournament = () => {
+  // --- AUTO GENERATE WITH CONFIRMATION INTERCEPTOR ---
+  const promptAutoTournament = () => {
     const players = data?.players || [];
     if (players.length < 4) return showAlert("Invalid Roster", "Need at least 4 players.");
+    
+    triggerHaptic(30);
+    showAlert(
+      "Generate Teams?",
+      `Are you ready to randomly shuffle all ${players.length} players and create the fixtures?`,
+      () => {
+        setModal({ show: false });
+        executeAutoTournament();
+      },
+      "Start League",
+      false // Sets the button to Amber instead of Red
+    );
+  };
+
+  const executeAutoTournament = () => {
+    const players = data?.players || [];
     triggerHaptic([100, 50, 100]);
 
     if (players.length % 2 !== 0) {
@@ -285,33 +314,36 @@ export default function App() {
       determineStatus(stats.filter(t => t.pool === 'A'), 2);
       determineStatus(stats.filter(t => t.pool === 'B'), 2);
     } else {
-      determineStatus(stats, stats.length === 4 ? 2 : 4);
+      determineStatus(stats, stats.length <= 4 ? 2 : 4); 
     }
 
     return stats;
   }, [data]);
 
   const finalMatch = data?.knockouts?.find(k => k.id === 'final');
-  const isTournamentOver = finalMatch?.done;
+  const isTournamentOver = data?.knockouts?.length > 0 ? finalMatch?.done : false; 
   const tournamentWinner = isTournamentOver ? (finalMatch.sA > finalMatch.sB ? finalMatch.tA.name : finalMatch.tB.name) : null;
   const isGroupStageLocked = data?.knockouts?.length > 0;
 
+  const needsKnockouts = data?.format === 'mixer' || standings.length > 2;
   const allMatchesDone = data?.matches?.length > 0 && data.matches.every(m => m.done);
   
   let knockoutButtonText = "Advance Top 4 to Finals";
   let isKnockoutReady = false;
   
-  if (data?.format === 'mixer') {
-    isKnockoutReady = standings.length >= 4 && allMatchesDone;
-  } else if (data?.pools === 2) {
-    const poolA = standings.filter(t => t.pool === 'A');
-    const poolB = standings.filter(t => t.pool === 'B');
-    isKnockoutReady = poolA.length >= 2 && poolB.length >= 2 && allMatchesDone;
-    knockoutButtonText = "Advance Top 2 from each Group";
-  } else {
-    const qCount = standings.length === 4 ? 2 : 4;
-    isKnockoutReady = standings.length >= qCount && allMatchesDone;
-    if (qCount === 2) knockoutButtonText = "Advance Top 2 to Finals";
+  if (needsKnockouts) {
+    if (data?.format === 'mixer') {
+      isKnockoutReady = standings.length >= 4 && allMatchesDone;
+    } else if (data?.pools === 2) {
+      const poolA = standings.filter(t => t.pool === 'A');
+      const poolB = standings.filter(t => t.pool === 'B');
+      isKnockoutReady = poolA.length >= 2 && poolB.length >= 2 && allMatchesDone;
+      knockoutButtonText = "Advance Top 2 from each Group";
+    } else {
+      const qCount = standings.length <= 4 ? 2 : 4;
+      isKnockoutReady = standings.length >= qCount && allMatchesDone;
+      if (qCount === 2) knockoutButtonText = "Advance Top 2 to Finals";
+    }
   }
 
   const generateKnockouts = () => {
@@ -333,7 +365,7 @@ export default function App() {
       knockouts.push({ id: 'sf1', type: 'Semi-Final 1 (A1 vs B2)', tA: poolA[0], tB: poolB[1], sA: 0, sB: 0, done: false });
       knockouts.push({ id: 'sf2', type: 'Semi-Final 2 (B1 vs A2)', tA: poolB[0], tB: poolA[1], sA: 0, sB: 0, done: false });
     } else {
-      if (standings.length === 4) {
+      if (standings.length <= 4) {
         knockouts.push({ id: 'final', type: '🏆 GRAND FINAL', tA: standings[0], tB: standings[1], sA: 0, sB: 0, done: false });
       } else {
         knockouts.push({ id: 'sf1', type: 'Semi-Final 1 (1st vs 4th)', tA: standings[0], tB: standings[3], sA: 0, sB: 0, done: false });
@@ -345,34 +377,34 @@ export default function App() {
   };
 
   const renderTable = (tableStandings, title = null) => (
-    <div className="bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl mb-6">
-      {title && <div className="bg-[#FFCB2B]/10 p-3 text-center text-[#FFCB2B] font-black uppercase text-[10px] tracking-widest">{title}</div>}
+    <div className="bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl mb-6">
+      {title && <div className="bg-gradient-to-r from-[#FFCA28]/20 to-transparent p-3 text-left pl-6 text-[#FFCA28] font-black uppercase text-[10px] tracking-widest border-b border-white/10">{title}</div>}
       <table className="w-full">
-        <thead className="bg-white/5 text-[9px] font-black text-slate-500 uppercase">
+        <thead className="bg-black/20 text-[9px] font-black text-slate-400 uppercase">
           <tr>
-            <th className="p-5 text-left pl-6">{data.format === 'mixer' ? 'Player' : 'Team'}</th>
-            <th className="p-5 text-center">W</th>
-            <th className="p-5 text-center text-[#FFCB2B]">Pts</th>
-            <th className="p-5 text-right pr-6">PD</th>
+            <th className="p-4 text-left pl-6">{data.format === 'mixer' ? 'Player' : 'Team'}</th>
+            <th className="p-4 text-center">P</th>
+            <th className="p-4 text-center">W</th>
+            <th className="p-4 text-center text-[#FFCA28]">Pts</th>
+            <th className="p-4 text-right pr-6">PD</th>
           </tr>
         </thead>
         <tbody>
           {tableStandings.map((t, i) => {
-            const rowClass = t.status === 'Q' ? 'bg-green-500/10' : (t.status === 'E' ? 'opacity-40 grayscale' : (i === 0 ? 'bg-[#FFCB2B]/5' : ''));
-            const badgeClass = t.status === 'Q' ? 'bg-green-500 text-black shadow-[0_0_10px_rgba(34,197,94,0.4)]' : (t.status === 'E' ? 'bg-red-500 text-white' : 'bg-white/10 text-white');
+            const rowClass = t.status === 'Q' ? 'bg-green-500/10' : (t.status === 'E' ? 'opacity-40 grayscale' : (i === 0 ? 'bg-gradient-to-r from-[#FFCA28]/10 to-transparent' : ''));
+            const badgeClass = t.status === 'Q' ? 'bg-green-500 text-[#031123] shadow-[0_0_10px_rgba(74,222,128,0.4)]' : (t.status === 'E' ? 'bg-red-500 text-white' : 'bg-white/10 text-white border border-white/10');
             const badgeText = t.status === 'Q' ? 'Q' : (t.status === 'E' ? 'E' : (i + 1));
-
+            
             return (
               <tr key={t.name} className={`border-b border-white/5 last:border-0 font-black transition-all ${rowClass}`}>
-                <td className="p-5 pl-6 flex items-center gap-3">
-                  <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] transition-colors ${badgeClass}`}>
-                    {badgeText}
-                  </span>
+                <td className="p-4 pl-6 flex items-center gap-3">
+                  <span className={`min-w-[20px] h-5 px-1 rounded flex items-center justify-center text-[8px] transition-colors ${badgeClass}`}>{badgeText}</span>
                   <span className="text-xs uppercase italic tracking-tighter truncate max-w-[90px]">{t.name}</span>
                 </td>
-                <td className="p-5 text-center text-white">{t.w}</td>
-                <td className="p-5 text-center text-[#FFCB2B] font-bold text-lg">{t.pts}</td>
-                <td className="p-5 text-right pr-6 text-xs text-slate-400 font-mono tracking-tighter">{t.pd > 0 ? `+${t.pd}` : t.pd}</td>
+                <td className="p-4 text-center text-slate-300">{t.p}</td>
+                <td className="p-4 text-center text-white">{t.w}</td>
+                <td className="p-4 text-center text-[#FFCA28] font-bold text-lg drop-shadow-md">{t.pts}</td>
+                <td className="p-4 text-right pr-6 text-xs text-slate-400 font-mono tracking-tighter">{t.pd > 0 ? `+${t.pd}` : t.pd}</td>
               </tr>
             );
           })}
@@ -387,16 +419,17 @@ export default function App() {
   const availablePlayers = (data?.players || []).filter(p => !manualTeams.some(t => t.name.includes(p)));
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[#031123] text-white font-sans selection:bg-[#FFCB2B]/30 relative">
+    <div className="max-w-md mx-auto min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#0B1E36] via-[#031123] to-[#010812] text-white font-sans selection:bg-[#FFCA28]/30 relative">
       
+      {/* CHAMPIONS CELEBRATION */}
       <AnimatePresence>
         {isTournamentOver && !dismissCelebration && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-6 bg-[#031123]/95 backdrop-blur-3xl">
-            <motion.div animate={{ scale: [0.9, 1.1, 1], rotate: [0, -5, 5, 0] }} transition={{ duration: 1, ease: "easeOut" }} className="text-[#FFCB2B] mb-8 relative">
-              <div className="absolute inset-0 blur-3xl bg-yellow-500/40 rounded-full animate-pulse"></div>
-              <Crown size={100} className="relative z-10 drop-shadow-[0_0_30px_rgba(255,203,43,0.8)]" />
+            <motion.div animate={{ scale: [0.9, 1.1, 1], rotate: [0, -5, 5, 0] }} transition={{ duration: 1, ease: "easeOut" }} className="text-[#FFCA28] mb-8 relative">
+              <div className="absolute inset-0 blur-3xl bg-[#FFCA28]/40 rounded-full animate-pulse"></div>
+              <Crown size={100} className="relative z-10 drop-shadow-[0_0_30px_rgba(255,202,40,0.8)]" />
             </motion.div>
-            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 mb-2">Tournament Champions</h2>
+            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-[#FFCA28]/60 mb-2">Tournament Champions</h2>
             <motion.h1 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="text-4xl font-black italic uppercase tracking-tighter text-center mb-12 text-white drop-shadow-2xl">
               {tournamentWinner}
             </motion.h1>
@@ -410,43 +443,47 @@ export default function App() {
       <AnimatePresence>
         {modal.show && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#0a1f3d] border border-white/10 p-8 rounded-[3rem] w-full text-center">
-              <AlertTriangle size={48} className="mx-auto mb-4 text-[#FFCB2B]" />
-              <h2 className="text-xl font-black mb-2 uppercase italic">{modal.title}</h2>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#051A2E] border border-white/10 p-8 rounded-[3rem] w-full text-center shadow-2xl shadow-[#FFCA28]/10">
+              <AlertTriangle size={48} className="mx-auto mb-4 text-[#FFCA28]" />
+              <h2 className="text-xl font-black mb-2 uppercase italic text-white">{modal.title}</h2>
               <p className="text-slate-400 text-sm mb-8 leading-relaxed">{modal.message}</p>
               <div className="flex gap-4">
-                <button onClick={() => setModal({ ...modal, show: false })} className="flex-1 bg-white/5 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest">Close</button>
+                <button onClick={() => setModal({ ...modal, show: false })} className="flex-1 bg-white/5 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest text-white">Cancel</button>
                 {modal.onConfirm && (
-                  <button onClick={modal.onConfirm} className="flex-1 bg-red-600 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest shadow-lg">Confirm</button>
+                  <button 
+                    onClick={modal.onConfirm} 
+                    className={`flex-1 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg ${modal.isDestructive ? 'bg-red-600 text-white' : 'bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123]'}`}
+                  >
+                    {modal.confirmText}
+                  </button>
                 )}
               </div>
             </motion.div>
           </motion.div>
         )}
-
         {showPoolSelector && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#0a1f3d] border border-white/10 p-8 rounded-[3rem] w-full text-center shadow-2xl">
-              <SplitSquareHorizontal size={48} className="mx-auto mb-4 text-[#FFCB2B]" />
-              <h2 className="text-xl font-black mb-2 uppercase italic tracking-tighter leading-none">Huge Turnout!</h2>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#051A2E] border border-white/10 p-8 rounded-[3rem] w-full text-center shadow-2xl shadow-[#FFCA28]/10">
+              <SplitSquareHorizontal size={48} className="mx-auto mb-4 text-[#FFCA28]" />
+              <h2 className="text-xl font-black mb-2 uppercase italic tracking-tighter leading-none text-white">Huge Turnout!</h2>
               <p className="text-slate-400 text-xs mb-8">You have {pendingTeams.length} teams. How would you like to structure the league?</p>
               <div className="space-y-4">
-                <button onClick={() => finalizeFixedTeams(pendingTeams, 2)} className="w-full bg-[#FFCB2B] text-black py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg">2 Pools (Group A & B)</button>
-                <button onClick={() => finalizeFixedTeams(pendingTeams, 1)} className="w-full bg-white/5 py-5 rounded-2xl font-bold uppercase text-[10px] tracking-widest">1 Massive Pool</button>
+                <button onClick={() => finalizeFixedTeams(pendingTeams, 2)} className="w-full bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123] py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg">2 Pools (Group A & B)</button>
+                <button onClick={() => finalizeFixedTeams(pendingTeams, 1)} className="w-full bg-white/5 py-5 rounded-2xl font-bold uppercase text-[10px] tracking-widest text-white">1 Massive Pool</button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <header className="p-6 flex justify-between items-center sticky top-0 bg-[#031123]/95 backdrop-blur-xl z-50 border-b border-white/5">
-        <h1 className="text-2xl font-black italic tracking-tighter uppercase">P-PRO <span className="text-[#FFCB2B]">OS</span></h1>
+      <header className="p-6 flex justify-between items-center sticky top-0 bg-gradient-to-b from-[#031123] to-[#031123]/80 backdrop-blur-xl z-50 border-b border-white/5">
+        <h1 className="text-2xl font-black italic tracking-tighter uppercase drop-shadow-md">P-PRO <span className="text-[#FFCA28]">OS</span></h1>
         <div className="flex gap-2">
-          <button onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }} className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isAdmin ? 'bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.5)]' : 'bg-white/5 opacity-30'}`}>
+          <button onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }} className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isAdmin ? 'bg-gradient-to-tr from-[#F57C00] to-[#FFCA28] shadow-[0_0_15px_rgba(245,124,0,0.5)] text-[#031123]' : 'bg-white/5 opacity-40 text-white'}`}>
             {isAdmin ? <Unlock size={18}/> : <Lock size={18}/>}
           </button>
           {isAdmin && (
-            <button onClick={() => showAlert("Reset Data", "Wipe the current tournament?", () => { remove(ref(db, 'tournament/')); setModal({show:false}); setDismissCelebration(false); })} className="w-10 h-10 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center">
+            <button onClick={() => showAlert("Reset Data", "Wipe the current tournament?", () => { remove(ref(db, 'tournament/')); setModal({show:false}); setDismissCelebration(false); }, "Reset", true)} className="w-10 h-10 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center">
               <RotateCcw size={18}/>
             </button>
           )}
@@ -458,45 +495,45 @@ export default function App() {
           <div className="space-y-6">
             {!isManualMode ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-                <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem]">
+                <div className="bg-gradient-to-br from-white/[0.05] to-transparent border border-white/10 p-6 rounded-[2.5rem] shadow-xl">
                   <form onSubmit={addPlayer} className="flex gap-2 mb-6">
-                    <input value={newPlayer} onChange={e => setNewPlayer(e.target.value)} placeholder="Player Name..." className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-[#FFCB2B]" />
-                    <button type="submit" className="bg-[#FFCB2B] text-black w-14 h-14 rounded-2xl flex items-center justify-center"><Plus/></button>
+                    <input value={newPlayer} onChange={e => setNewPlayer(e.target.value)} placeholder="Player Name..." className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-[#FFCA28] text-white" />
+                    <button type="submit" className="bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123] w-14 h-14 rounded-2xl flex items-center justify-center"><Plus/></button>
                   </form>
                   <div className="grid grid-cols-2 gap-2 max-h-[250px] overflow-y-auto pr-1">
                     {(data?.players || []).map((p, i) => (
                       <div key={i} className="flex justify-between items-center bg-white/5 px-4 py-3 rounded-xl border border-white/5 text-[10px] font-black uppercase tracking-tighter">
-                        {p} <button onClick={() => removePlayer(i)} className="text-white/20"><Trash2 size={14}/></button>
+                        {p} <button onClick={() => removePlayer(i)} className="text-white/20 hover:text-red-400 transition-colors"><Trash2 size={14}/></button>
                       </div>
                     ))}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={startAutoTournament} className="bg-white/5 border border-white/10 p-6 rounded-[2.2rem] flex flex-col items-center">
-                    <Zap className="text-[#FFCB2B] mb-2" />
-                    <p className="text-[10px] font-black uppercase">Auto</p>
+                  <button onClick={promptAutoTournament} className="bg-white/5 border border-white/10 p-6 rounded-[2.2rem] flex flex-col items-center hover:bg-white/10 transition-colors">
+                    <Zap className="text-[#FFCA28] mb-2 drop-shadow-md" />
+                    <p className="text-[10px] font-black uppercase text-white">Auto</p>
                   </button>
-                  <button onClick={() => { triggerHaptic(60); setIsManualMode(true); }} className="bg-white/5 border border-white/10 p-6 rounded-[2.2rem] flex flex-col items-center">
-                    <UsersRound className="text-[#FFCB2B] mb-2" />
-                    <p className="text-[10px] font-black uppercase">Manual</p>
+                  <button onClick={() => { triggerHaptic(60); setIsManualMode(true); }} className="bg-white/5 border border-white/10 p-6 rounded-[2.2rem] flex flex-col items-center hover:bg-white/10 transition-colors">
+                    <UsersRound className="text-[#FFCA28] mb-2 drop-shadow-md" />
+                    <p className="text-[10px] font-black uppercase text-white">Manual</p>
                   </button>
                 </div>
               </motion.div>
             ) : (
               <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-6">
                 <header className="flex justify-between items-center">
-                  <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Manual Selection</h3>
-                  <button onClick={() => setIsManualMode(false)} className="text-[#FFCB2B] font-black uppercase text-[10px]">Cancel</button>
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Manual Selection</h3>
+                  <button onClick={() => setIsManualMode(false)} className="text-[#FFCA28] font-black uppercase text-[10px]">Cancel</button>
                 </header>
                 <div className="flex flex-wrap gap-2">
                   {availablePlayers.map((p, i) => (
-                    <button key={i} onClick={() => handleManualSelect(p)} className={`px-5 py-4 rounded-2xl border transition-all font-black text-[11px] uppercase ${selectedPlayers.includes(p) ? 'bg-[#FFCB2B] text-black border-[#FFCB2B]' : 'bg-white/5 border-white/10'}`}>
+                    <button key={i} onClick={() => handleManualSelect(p)} className={`px-5 py-4 rounded-2xl border transition-all font-black text-[11px] uppercase shadow-lg ${selectedPlayers.includes(p) ? 'bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123] border-transparent' : 'bg-white/5 border-white/10 text-white'}`}>
                       {p}
                     </button>
                   ))}
                 </div>
                 {availablePlayers.length < 2 && manualTeams.length > 0 && (
-                  <button onClick={() => handleFormatSelection(manualTeams)} className="w-full bg-[#FFCB2B] text-black py-6 rounded-[2.5rem] font-black uppercase shadow-2xl">Start Matches</button>
+                  <button onClick={() => handleFormatSelection(manualTeams)} className="w-full bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123] py-6 rounded-[2.5rem] font-black uppercase shadow-[0_10px_30px_rgba(245,124,0,0.3)]">Start Matches</button>
                 )}
               </motion.div>
             )}
@@ -505,10 +542,10 @@ export default function App() {
           <motion.div 
             drag="x" 
             dragDirectionLock 
-            onDragEnd={handleSwipe} 
+            onDragEnd={handleScreenSwipe} 
             dragConstraints={{ left: 0, right: 0 }} 
-            dragElastic={0.2} 
-            className="touch-pan-y"
+            dragElastic={0.1} 
+            className="touch-pan-y min-h-full"
           >
             <AnimatePresence mode="wait">
               {activeTab === 'matches' ? (
@@ -516,34 +553,42 @@ export default function App() {
                   
                   {data?.knockouts && (
                     <div className="mb-10 space-y-4">
-                      <h3 className="flex items-center justify-center gap-2 text-[#FFCB2B] font-black uppercase tracking-widest text-xs mb-6 mt-2">
+                      <h3 className="flex items-center justify-center gap-2 text-[#FFCA28] font-black uppercase tracking-widest text-xs mb-6 mt-2 drop-shadow-md">
                         <Trophy size={14}/> Knockout Stage
                       </h3>
                       {data.knockouts.map((m, idx) => {
                         const isWinnerHighlight = m.id === 'final' && m.done;
                         const cardClass = isWinnerHighlight 
-                          ? 'bg-gradient-to-br from-[#FFCB2B]/30 to-black/60 border-2 border-[#FFCB2B] shadow-[0_0_50px_rgba(255,203,43,0.5)] z-10 scale-[1.02]' 
-                          : (m.done ? 'opacity-40 grayscale bg-white/5 border border-white/10' : 'bg-gradient-to-br from-[#FFCB2B]/20 to-transparent border border-[#FFCB2B]/30 shadow-lg');
+                          ? 'bg-gradient-to-br from-[#FFCA28]/20 to-[#F57C00]/10 border-2 border-[#FFCA28] shadow-[0_0_40px_rgba(255,202,40,0.3)] z-10 scale-[1.02]' 
+                          : (m.done ? 'opacity-40 grayscale bg-white/5 border border-white/10' : 'bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 shadow-xl');
                         
                         const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
 
                         return (
                           <div key={m.id} className={`relative p-6 rounded-[2.5rem] transition-all duration-500 pt-8 ${cardClass}`}>
-                            <div className={`absolute top-0 left-1/2 -translate-x-1/2 px-4 py-1 rounded-b-xl text-[8px] font-black uppercase tracking-widest whitespace-nowrap ${isWinnerHighlight ? 'bg-[#FFCB2B] text-black' : 'bg-white/10 text-white'}`}>
+                            <div className={`absolute top-0 left-1/2 -translate-x-1/2 px-4 py-1 rounded-b-xl text-[8px] font-black uppercase tracking-widest whitespace-nowrap shadow-md ${isWinnerHighlight ? 'bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123]' : 'bg-white/10 text-white border border-t-0 border-white/10'}`}>
                               {m.type}
                             </div>
                             <div className="flex items-center justify-between gap-4 mt-2">
                               <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-white">{m.tA.name}</p>
-                              <div className={`flex items-center gap-2 bg-black/60 p-1 rounded-2xl border ${isWinnerHighlight ? 'border-[#FFCB2B]' : 'border-[#FFCB2B]/30'}`}>
-                                <input type="text" inputMode="numeric" disabled={!isAdmin || (isTournamentOver && m.id !== 'final')} value={m.sA === 0 && isAdmin ? "" : m.sA} placeholder="0" onChange={e => updateKnockoutScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
-                                <div className={`h-4 w-px ${isWinnerHighlight ? 'bg-[#FFCB2B]' : 'bg-[#FFCB2B]/50'}`} />
-                                <input type="text" inputMode="numeric" disabled={!isAdmin || (isTournamentOver && m.id !== 'final')} value={m.sB === 0 && isAdmin ? "" : m.sB} placeholder="0" onChange={e => updateKnockoutScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                              <div className={`flex items-center gap-2 bg-black/60 p-1 rounded-2xl border ${isWinnerHighlight ? 'border-[#FFCA28]' : 'border-white/10'}`}>
+                                {isAdmin && (!isTournamentOver || m.id === 'final') ? (
+                                  <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sA === 0 ? "" : m.sA} placeholder="0" onChange={e => updateKnockoutScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none" />
+                                ) : (
+                                  <SpectatorScore score={m.sA} />
+                                )}
+                                <div className={`h-4 w-px ${isWinnerHighlight ? 'bg-[#FFCA28]' : 'bg-white/20'}`} />
+                                {isAdmin && (!isTournamentOver || m.id === 'final') ? (
+                                  <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sB === 0 ? "" : m.sB} placeholder="0" onChange={e => updateKnockoutScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none" />
+                                ) : (
+                                  <SpectatorScore score={m.sB} />
+                                )}
                               </div>
                               <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-white">{m.tB.name}</p>
                             </div>
                             
                             {isAdmin && canFinalize && (
-                              <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmKnockout(idx)} className="w-full mt-5 bg-green-500/20 text-green-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border border-green-500/30">
+                              <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmKnockout(idx)} className="w-full mt-5 bg-gradient-to-r from-green-400 to-emerald-600 text-[#031123] py-3 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg">
                                 <Check size={14} className="inline mr-1 mb-0.5"/> Finalize Match
                               </motion.button>
                             )}
@@ -554,15 +599,15 @@ export default function App() {
                     </div>
                   )}
 
-                  {isAdmin && !data?.knockouts && isKnockoutReady && (
-                    <button onClick={generateKnockouts} className="w-full bg-gradient-to-r from-orange-500 to-[#FFCB2B] text-black py-5 rounded-[2rem] font-black uppercase shadow-2xl mb-6 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                  {isAdmin && !data?.knockouts && needsKnockouts && isKnockoutReady && (
+                    <button onClick={generateKnockouts} className="w-full bg-gradient-to-r from-[#FFCA28] to-[#F57C00] text-[#031123] py-5 rounded-[2rem] font-black uppercase shadow-[0_10px_30px_rgba(245,124,0,0.3)] mb-6 flex items-center justify-center gap-2 active:scale-95 transition-transform">
                       <Swords size={18}/> {knockoutButtonText}
                     </button>
                   )}
 
-                  {isAdmin && !data?.knockouts && !isKnockoutReady && data?.matches?.length > 0 && (
+                  {isAdmin && !data?.knockouts && needsKnockouts && !isKnockoutReady && data?.matches?.length > 0 && (
                     <div className="w-full bg-white/5 text-slate-400 py-4 rounded-[2rem] font-bold uppercase text-[10px] tracking-widest text-center mb-6 flex items-center justify-center gap-2 border border-white/5">
-                      <ShieldAlert size={14}/> Complete all matches to advance
+                      <ShieldAlert size={14}/> Complete matches to advance
                     </div>
                   )}
 
@@ -571,9 +616,9 @@ export default function App() {
                     const canFinalize = (m.sA >= 11 || m.sB >= 11) && Math.abs(m.sA - m.sB) >= 2 && !m.done;
 
                     return (
-                    <div key={m.id} className={`relative p-6 rounded-[2.5rem] bg-white/5 border border-white/10 transition-all ${m.done ? 'opacity-30' : 'shadow-lg'}`}>
+                    <div key={m.id} className={`relative p-6 rounded-[2.5rem] bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 transition-all ${m.done ? 'opacity-30' : 'shadow-xl'}`}>
                       {data.pools === 2 && (
-                         <div className="absolute top-0 right-0 bg-[#FFCB2B]/10 text-[#FFCB2B] px-3 py-1 rounded-bl-xl rounded-tr-[2.5rem] text-[8px] font-black uppercase tracking-widest">
+                         <div className="absolute top-0 right-0 bg-gradient-to-bl from-[#F57C00] to-[#FFCA28] text-[#031123] px-3 py-1 rounded-bl-xl rounded-tr-[2.5rem] text-[8px] font-black uppercase tracking-widest shadow-md">
                            Pool {m.pool}
                          </div>
                       )}
@@ -581,18 +626,28 @@ export default function App() {
                         <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-slate-300">
                           <span className="text-white">{m.tA.p1}</span><br/>&<br/><span className="text-white">{m.tA.p2}</span>
                         </p>
-                        <div className="flex items-center gap-2 bg-black/60 p-1 rounded-2xl border border-white/5 mt-2">
-                          <input type="text" inputMode="numeric" disabled={!isAdmin || lockGroupStage} value={m.sA === 0 && isAdmin ? "" : m.sA} placeholder="0" onChange={e => updateScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
-                          <div className="h-4 w-px bg-white/10" />
-                          <input type="text" inputMode="numeric" disabled={!isAdmin || lockGroupStage} value={m.sB === 0 && isAdmin ? "" : m.sB} placeholder="0" onChange={e => updateScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCB2B] outline-none" />
+                        
+                        <div className="flex items-center gap-2 bg-black/60 p-1 rounded-2xl border border-white/10 mt-2">
+                          {isAdmin && !lockGroupStage ? (
+                            <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sA === 0 ? "" : m.sA} placeholder="0" onChange={e => updateScore(idx, 'A', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none placeholder:text-white/20" />
+                          ) : (
+                            <SpectatorScore score={m.sA} />
+                          )}
+                          <div className="h-4 w-px bg-white/20" />
+                          {isAdmin && !lockGroupStage ? (
+                            <input type="text" inputMode="numeric" disabled={!isAdmin} value={m.sB === 0 ? "" : m.sB} placeholder="0" onChange={e => updateScore(idx, 'B', e.target.value)} className="w-12 h-12 bg-transparent text-center text-xl font-black text-[#FFCA28] outline-none placeholder:text-white/20" />
+                          ) : (
+                            <SpectatorScore score={m.sB} />
+                          )}
                         </div>
+
                         <p className="w-1/3 text-center text-[10px] font-black uppercase tracking-tighter leading-tight text-slate-300">
                            <span className="text-white">{m.tB.p1}</span><br/>&<br/><span className="text-white">{m.tB.p2}</span>
                         </p>
                       </div>
 
                       {isAdmin && canFinalize && (
-                        <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmMatch(idx)} className="w-full mt-5 bg-green-500/20 text-green-400 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border border-green-500/30">
+                        <motion.button initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} onClick={() => confirmMatch(idx)} className="w-full mt-5 bg-gradient-to-r from-green-400 to-emerald-600 text-[#031123] py-3 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg">
                           <Check size={14} className="inline mr-1 mb-0.5"/> Finalize Match
                         </motion.button>
                       )}
@@ -603,11 +658,106 @@ export default function App() {
                 <motion.div key="table" initial={{opacity:0, x:20}} animate={{opacity:1, x:0}} exit={{opacity:0, x:20}} className="space-y-6">
                   {data?.pools === 2 ? (
                     <>
-                      {renderTable(standings.filter(t => t.pool === 'A'), 'Group A')}
-                      {renderTable(standings.filter(t => t.pool === 'B'), 'Group B')}
+                      <div className="bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl mb-6">
+                        <div className="bg-gradient-to-r from-[#FFCA28]/20 to-transparent p-3 text-left pl-6 text-[#FFCA28] font-black uppercase text-[10px] tracking-widest border-b border-white/10">Group A</div>
+                        <table className="w-full">
+                          <thead className="bg-black/20 text-[9px] font-black text-slate-400 uppercase">
+                            <tr>
+                              <th className="p-4 text-left pl-6">{data.format === 'mixer' ? 'Player' : 'Team'}</th>
+                              <th className="p-4 text-center">P</th>
+                              <th className="p-4 text-center">W</th>
+                              <th className="p-4 text-center text-[#FFCA28]">Pts</th>
+                              <th className="p-4 text-right pr-6">PD</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {standings.filter(t => t.pool === 'A').map((t, i) => {
+                              const rowClass = t.status === 'Q' ? 'bg-green-500/10' : (t.status === 'E' ? 'opacity-40 grayscale' : (i === 0 ? 'bg-[#FFCA28]/5' : ''));
+                              const badgeClass = t.status === 'Q' ? 'bg-green-500 text-[#031123] shadow-[0_0_10px_rgba(74,222,128,0.4)]' : (t.status === 'E' ? 'bg-red-500 text-white' : 'bg-white/10 text-white border border-white/10');
+                              const badgeText = t.status === 'Q' ? 'Q' : (t.status === 'E' ? 'E' : (i + 1));
+                              return (
+                                <tr key={t.name} className={`border-b border-white/5 last:border-0 font-black transition-all ${rowClass}`}>
+                                  <td className="p-4 pl-6 flex items-center gap-3">
+                                    <span className={`min-w-[20px] h-5 px-1 rounded flex items-center justify-center text-[8px] transition-colors ${badgeClass}`}>{badgeText}</span>
+                                    <span className="text-xs uppercase italic tracking-tighter truncate max-w-[90px]">{t.name}</span>
+                                  </td>
+                                  <td className="p-4 text-center text-slate-300">{t.p}</td>
+                                  <td className="p-4 text-center text-white">{t.w}</td>
+                                  <td className="p-4 text-center text-[#FFCA28] font-bold text-lg drop-shadow-md">{t.pts}</td>
+                                  <td className="p-4 text-right pr-6 text-xs text-slate-400 font-mono tracking-tighter">{t.pd > 0 ? `+${t.pd}` : t.pd}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl mb-6">
+                        <div className="bg-gradient-to-r from-[#FFCA28]/20 to-transparent p-3 text-left pl-6 text-[#FFCA28] font-black uppercase text-[10px] tracking-widest border-b border-white/10">Group B</div>
+                        <table className="w-full">
+                          <thead className="bg-black/20 text-[9px] font-black text-slate-400 uppercase">
+                            <tr>
+                              <th className="p-4 text-left pl-6">{data.format === 'mixer' ? 'Player' : 'Team'}</th>
+                              <th className="p-4 text-center">P</th>
+                              <th className="p-4 text-center">W</th>
+                              <th className="p-4 text-center text-[#FFCA28]">Pts</th>
+                              <th className="p-4 text-right pr-6">PD</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {standings.filter(t => t.pool === 'B').map((t, i) => {
+                              const rowClass = t.status === 'Q' ? 'bg-green-500/10' : (t.status === 'E' ? 'opacity-40 grayscale' : (i === 0 ? 'bg-[#FFCA28]/5' : ''));
+                              const badgeClass = t.status === 'Q' ? 'bg-green-500 text-[#031123] shadow-[0_0_10px_rgba(74,222,128,0.4)]' : (t.status === 'E' ? 'bg-red-500 text-white' : 'bg-white/10 text-white border border-white/10');
+                              const badgeText = t.status === 'Q' ? 'Q' : (t.status === 'E' ? 'E' : (i + 1));
+                              return (
+                                <tr key={t.name} className={`border-b border-white/5 last:border-0 font-black transition-all ${rowClass}`}>
+                                  <td className="p-4 pl-6 flex items-center gap-3">
+                                    <span className={`min-w-[20px] h-5 px-1 rounded flex items-center justify-center text-[8px] transition-colors ${badgeClass}`}>{badgeText}</span>
+                                    <span className="text-xs uppercase italic tracking-tighter truncate max-w-[90px]">{t.name}</span>
+                                  </td>
+                                  <td className="p-4 text-center text-slate-300">{t.p}</td>
+                                  <td className="p-4 text-center text-white">{t.w}</td>
+                                  <td className="p-4 text-center text-[#FFCA28] font-bold text-lg drop-shadow-md">{t.pts}</td>
+                                  <td className="p-4 text-right pr-6 text-xs text-slate-400 font-mono tracking-tighter">{t.pd > 0 ? `+${t.pd}` : t.pd}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </>
                   ) : (
-                    renderTable(standings)
+                    <div className="bg-gradient-to-br from-white/[0.08] to-transparent border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl mb-6">
+                      <table className="w-full">
+                        <thead className="bg-black/20 text-[9px] font-black text-slate-400 uppercase">
+                          <tr>
+                            <th className="p-4 text-left pl-6">{data.format === 'mixer' ? 'Player' : 'Team'}</th>
+                            <th className="p-4 text-center">P</th>
+                            <th className="p-4 text-center">W</th>
+                            <th className="p-4 text-center text-[#FFCA28]">Pts</th>
+                            <th className="p-4 text-right pr-6">PD</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {standings.map((t, i) => {
+                            const rowClass = t.status === 'Q' ? 'bg-green-500/10' : (t.status === 'E' ? 'opacity-40 grayscale' : (i === 0 ? 'bg-gradient-to-r from-[#FFCA28]/10 to-transparent' : ''));
+                            const badgeClass = t.status === 'Q' ? 'bg-green-500 text-[#031123] shadow-[0_0_10px_rgba(74,222,128,0.4)]' : (t.status === 'E' ? 'bg-red-500 text-white' : 'bg-white/10 text-white border border-white/10');
+                            const badgeText = t.status === 'Q' ? 'Q' : (t.status === 'E' ? 'E' : (i + 1));
+                            return (
+                              <tr key={t.name} className={`border-b border-white/5 last:border-0 font-black transition-all ${rowClass}`}>
+                                <td className="p-4 pl-6 flex items-center gap-3">
+                                  <span className={`min-w-[20px] h-5 px-1 rounded flex items-center justify-center text-[8px] transition-colors ${badgeClass}`}>{badgeText}</span>
+                                  <span className="text-xs uppercase italic tracking-tighter truncate max-w-[90px]">{t.name}</span>
+                                </td>
+                                <td className="p-4 text-center text-slate-300">{t.p}</td>
+                                <td className="p-4 text-center text-white">{t.w}</td>
+                                <td className="p-4 text-center text-[#FFCA28] font-bold text-lg drop-shadow-md">{t.pts}</td>
+                                <td className="p-4 text-right pr-6 text-xs text-slate-400 font-mono tracking-tighter">{t.pd > 0 ? `+${t.pd}` : t.pd}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </motion.div>
               )}
@@ -617,15 +767,34 @@ export default function App() {
       </main>
 
       {!isSetupMode && (
-        <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] bg-black/60 backdrop-blur-3xl rounded-full p-2 flex border border-white/10 shadow-2xl z-40">
-          <div className="absolute h-[calc(100%-16px)] w-[calc(50%-8px)] bg-[#FFCB2B] rounded-full transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]"
-               style={{ transform: `translateX(${activeTab === 'matches' ? '0' : '100%'})` }} />
-          <button onClick={() => { triggerHaptic(30); setActiveTab('matches'); }} className={`relative z-10 flex-1 py-4 flex items-center justify-center gap-2 transition-colors duration-500 ${activeTab === 'matches' ? 'text-black font-black' : 'text-slate-500 uppercase text-[10px]'}`}>
-            <LayoutGrid size={20} />{activeTab === 'matches' && "Fixtures"}
-          </button>
-          <button onClick={() => { triggerHaptic(30); setActiveTab('standings'); }} className={`relative z-10 flex-1 py-4 flex items-center justify-center gap-2 transition-colors duration-500 ${activeTab === 'standings' ? 'text-black font-black' : 'text-slate-500 uppercase text-[10px]'}`}>
-            <Users size={20} />{activeTab === 'standings' && "Table"}
-          </button>
+        <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] bg-[#031123]/90 backdrop-blur-3xl rounded-full p-2 flex border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50">
+          <motion.div
+            className="absolute top-2 bottom-2 w-[calc(50%-8px)] bg-gradient-to-r from-[#FFCA28] to-[#F57C00] rounded-full z-0 shadow-md"
+            animate={{ x: activeTab === 'matches' ? '0%' : '100%' }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          />
+          <motion.div
+            className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(e, info) => {
+              if (info.offset.x > 30) { triggerHaptic(30); setActiveTab('standings'); }
+              else if (info.offset.x < -30) { triggerHaptic(30); setActiveTab('matches'); }
+            }}
+            onTap={(e, info) => {
+              if (info.point.x > window.innerWidth / 2) { triggerHaptic(30); setActiveTab('standings'); }
+              else { triggerHaptic(30); setActiveTab('matches'); }
+            }}
+          />
+          <div className="relative z-10 flex-1 py-4 flex items-center justify-center gap-2 pointer-events-none transition-colors duration-500">
+            <LayoutGrid size={20} className={activeTab === 'matches' ? 'text-[#031123]' : 'text-slate-500'} />
+            {activeTab === 'matches' && <span className="text-[#031123] font-black uppercase text-[10px] tracking-widest drop-shadow-sm">Fixtures</span>}
+          </div>
+          <div className="relative z-10 flex-1 py-4 flex items-center justify-center gap-2 pointer-events-none transition-colors duration-500">
+            <Users size={20} className={activeTab === 'standings' ? 'text-[#031123]' : 'text-slate-500'} />
+            {activeTab === 'standings' && <span className="text-[#031123] font-black uppercase text-[10px] tracking-widest drop-shadow-sm">Table</span>}
+          </div>
         </nav>
       )}
     </div>
