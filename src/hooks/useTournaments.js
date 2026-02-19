@@ -8,13 +8,22 @@ export const useTournaments = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const dbRef = ref(db);
-        return onValue(dbRef, (snapshot) => {
-            const val = snapshot.val();
-            setTournaments(val?.tournaments || {});
-            setRoster(val?.roster || []);
+        const tournamentsRef = ref(db, "tournaments");
+        const rosterRef = ref(db, "roster");
+
+        const unsubTournaments = onValue(tournamentsRef, (snapshot) => {
+            setTournaments(snapshot.val() || {});
             setLoading(false);
         });
+
+        const unsubRoster = onValue(rosterRef, (snapshot) => {
+            setRoster(snapshot.val() || []);
+        });
+
+        return () => {
+            unsubTournaments();
+            unsubRoster();
+        };
     }, []);
 
     return { tournaments, roster, loading };

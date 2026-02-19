@@ -100,9 +100,10 @@ export default function TournamentView({
     const qCount = useMemo(() => qualifyCount(standings.length), [standings.length]);
 
     // All pool matches done check
-    const allMatchesDone = useMemo(() =>
-        (data?.matches || []).length > 0 && (data?.matches || []).every((m) => m.done),
-        [data?.matches]);
+    const allMatchesDone = useMemo(() => {
+        const matches = data?.matches || [];
+        return matches.length > 0 && matches.every((m) => m && m.done);
+    }, [data?.matches]);
 
     return (
         <div className="max-w-md mx-auto h-[100dvh] flex flex-col relative overflow-hidden text-white"

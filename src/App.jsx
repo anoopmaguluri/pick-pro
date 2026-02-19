@@ -7,6 +7,7 @@ import { AnimatePresence } from "framer-motion";
 import Modal from "./components/common/Modal";
 import TournamentHub from "./components/modules/tournament/TournamentHub";
 import TournamentView from "./components/modules/tournament/TournamentView";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 
 // Hooks & Utils
 import { useTournaments } from "./hooks/useTournaments";
@@ -20,6 +21,13 @@ function App() {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTournamentId, setActiveTournamentId] = useState(null);
+
+  // Auto-clear active tournament if it doesn't exist anymore
+  useEffect(() => {
+    if (activeTournamentId && tournaments && !tournaments[activeTournamentId]) {
+      setActiveTournamentId(null);
+    }
+  }, [activeTournamentId, tournaments]);
 
   // Setup State
   const [newTourneyName, setNewTourneyName] = useState("");
@@ -136,7 +144,8 @@ function App() {
 
   const globalLeaderboard = useMemo(() => {
     const globStats = {};
-    Object.values(tournaments).forEach((t) => {
+    Object.values(tournaments || {}).forEach((t) => {
+      if (!t) return;
       if (t.matches) {
         processMatches(t.matches, globStats);
       }
@@ -376,10 +385,20 @@ function App() {
     showAlert("Info", "Editing standings is locked.");
   };
 
-  if (loading) return <div className="h-[100dvh] bg-[#031123]" />;
+  if (loading) return (
+    <div className="h-[100dvh] bg-[#030712] flex flex-col items-center justify-center p-8 text-center relative overflow-hidden">
+      <div className="absolute top-20 left-1/4 w-72 h-72 rounded-full blur-3xl pointer-events-none opacity-20" style={{ background: "rgba(99,102,241,0.2)" }} />
+      <div className="absolute bottom-32 right-0 w-56 h-56 rounded-full blur-3xl pointer-events-none opacity-20" style={{ background: "rgba(236,72,153,0.1)" }} />
+
+      <div className="relative z-10">
+        <div className="w-16 h-16 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-6" />
+        <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white/40">Syncing Data</h2>
+      </div>
+    </div>
+  );
 
   return (
-    <>
+    <ErrorBoundary>
       <Modal
         show={modal.show}
         title={modal.title}
@@ -443,7 +462,7 @@ function App() {
           setIsAdmin={setIsAdmin}
         />
       )}
-    </>
+    </ErrorBoundary>
   );
 }
 
