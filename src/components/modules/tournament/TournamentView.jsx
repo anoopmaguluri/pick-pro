@@ -214,7 +214,7 @@ export default function TournamentView({
             {/* MAIN SCROLL */}
             <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain relative z-10"
                 style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", scrollbarWidth: "none" }}>
-                <div className="p-5 pb-32">
+                <div className="p-5 pb-36">
                     {isSetupMode ? (
                         <Setup
                             data={data}
@@ -240,20 +240,36 @@ export default function TournamentView({
                         <div className="pb-6">
                             <AnimatePresence mode="wait">
                                 {activeTab === "matches" ? (
-                                    <MatchList
-                                        matches={data.matches} knockouts={data.knockouts}
-                                        isAdmin={isAdmin} adjustScore={adjustScore}
-                                        confirmMatch={confirmMatch} confirmKnockout={confirmKnockout}
-                                    />
+                                    <motion.div
+                                        key="matches"
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        transition={{ duration: 0.2, ease: "easeOut" }}
+                                    >
+                                        <MatchList
+                                            matches={data.matches} knockouts={data.knockouts}
+                                            isAdmin={isAdmin} adjustScore={adjustScore}
+                                            confirmMatch={confirmMatch} confirmKnockout={confirmKnockout}
+                                        />
+                                    </motion.div>
                                 ) : (
-                                    <StandingsTable
-                                        standings={standings} isAdmin={isAdmin}
-                                        handleStandingsLongPress={handleStandingsLongPress}
-                                        isKnockoutReady={allMatchesDone}
-                                        generateKnockouts={generateKnockouts}
-                                        isKnockoutStarted={data.knockouts?.length > 0}
-                                        qualifyCount={qCount}
-                                    />
+                                    <motion.div
+                                        key="standings"
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -10 }}
+                                        transition={{ duration: 0.2, ease: "easeOut" }}
+                                    >
+                                        <StandingsTable
+                                            standings={standings} isAdmin={isAdmin}
+                                            handleStandingsLongPress={handleStandingsLongPress}
+                                            isKnockoutReady={allMatchesDone}
+                                            generateKnockouts={generateKnockouts}
+                                            isKnockoutStarted={data.knockouts?.length > 0}
+                                            qualifyCount={qCount}
+                                        />
+                                    </motion.div>
                                 )}
                             </AnimatePresence>
                         </div>
@@ -264,13 +280,13 @@ export default function TournamentView({
             {/* BOTTOM TAB BAR */}
             {!isSetupMode && (
                 <div className="flex-none absolute bottom-0 left-0 right-0 z-50">
-                    <div className="absolute inset-0 pointer-events-none"
-                        style={{ background: "linear-gradient(to top, rgba(3,7,18,0.95) 60%, transparent)" }} />
-                    <div className="relative p-4 pb-6">
+                    <div className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
+                        style={{ background: "linear-gradient(to top, #030712 40%, rgba(3,7,18,0.8) 70%, transparent)" }} />
+                    <div className="relative px-6 pb-8 pt-4">
                         <LiquidTabBar
                             tabs={[
-                                { id: "matches", label: "Matches", icon: <Swords size={14} /> },
-                                { id: "standings", label: "Standings", icon: <TrendingUp size={14} /> },
+                                { id: "matches", label: "Matches", icon: <Swords size={16} /> },
+                                { id: "standings", label: "Standings", icon: <TrendingUp size={16} /> },
                             ]}
                             activeTab={activeTab}
                             onChange={(id) => { triggerHaptic(30); setActiveTab(id); }}

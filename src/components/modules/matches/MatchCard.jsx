@@ -49,6 +49,7 @@ function PipBar({ score, side, isDeuceZone }) {
                             boxShadow: active && isDeuceZone
                                 ? "0 0 6px rgba(255,202,40,0.7)"
                                 : "none",
+                            animation: active && isDeuceZone ? "deucePulse 1.5s ease-in-out infinite" : "none",
                         }}
                     />
                 );
@@ -195,8 +196,8 @@ function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isW
                         </motion.div>
                     )}
                     <div className="flex -space-x-2">
-                        <PlayerAvatar name={team.p1} className="w-8 h-8 text-[10px] z-10" />
-                        {team.p2 && <PlayerAvatar name={team.p2} className="w-8 h-8 text-[10px] z-0" />}
+                        <PlayerAvatar name={team.p1} className="w-8 h-8 text-[10px] z-10 ring-2 ring-white/10" />
+                        {team.p2 && <PlayerAvatar name={team.p2} className="w-8 h-8 text-[10px] z-0 ring-2 ring-white/10" />}
                     </div>
                     <p className="text-center text-[9px] font-black uppercase tracking-tight leading-tight"
                         style={{
@@ -261,12 +262,12 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
 
     const cardBg = isWinnerHighlight
         ? "linear-gradient(135deg, rgba(255,202,40,0.14), rgba(245,124,0,0.07))"
-        : match.done ? "rgba(255,255,255,0.03)"
+        : match.done ? "rgba(255,255,255,0.02)"
             : "linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))";
 
     const cardBorder = isWinnerHighlight
         ? "1.5px solid rgba(255,202,40,0.4)"
-        : match.done ? "1px solid rgba(255,255,255,0.06)"
+        : match.done ? "1px solid rgba(255,255,255,0.05)"
             : "1px solid rgba(255,255,255,0.1)";
 
     return (
@@ -275,8 +276,11 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
             style={{
                 background: cardBg,
                 border: cardBorder,
-                boxShadow: match.done ? "none" : "0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)",
-                backdropFilter: match.done ? "none" : "blur(20px)",
+                boxShadow: match.done
+                    ? "0 2px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.03)"
+                    : "0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)",
+                backdropFilter: "blur(20px)",
+                animation: !match.done && !isWinnerHighlight ? "breatheGlow 3s ease-in-out infinite" : "none",
             }}
         >
             {/* Glass sheen */}
@@ -309,8 +313,9 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
 
                 {/* Centre divider + phase banner */}
                 <div className="relative flex flex-col items-center justify-center" style={{ width: 1, flexShrink: 0 }}>
+                    {/* Gradient line */}
                     <div className="absolute inset-y-0 w-px"
-                        style={{ background: "linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.12) 70%, transparent 100%)" }} />
+                        style={{ background: "linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.15) 25%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.15) 75%, transparent 100%)" }} />
 
                     {/* Phase banner anchored to mid-card vertically */}
                     <div className="absolute" style={{ width: "100vw", left: "50%", transform: "translateX(-50%)", top: "50%", marginTop: -14 }}>
@@ -319,8 +324,18 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                         </AnimatePresence>
                     </div>
 
-                    <span className="text-[8px] font-black italic z-10 relative"
-                        style={{ color: "rgba(255,255,255,0.1)" }}>VS</span>
+                    {/* Diamond VS marker */}
+                    <div className="relative z-10 flex items-center justify-center"
+                        style={{
+                            width: 20, height: 20,
+                            transform: "rotate(45deg)",
+                            background: "rgba(255,255,255,0.06)",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: 3,
+                        }}>
+                        <span className="text-[6px] font-black"
+                            style={{ color: "rgba(255,255,255,0.25)", transform: "rotate(-45deg)" }}>VS</span>
+                    </div>
                 </div>
 
                 {/* Team B */}
@@ -355,7 +370,7 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                                 whileHover={{ scale: 1.02 }}
                                 transition={{ type: "spring", stiffness: 420, damping: 22 }}
                                 onClick={onConfirm}
-                                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[1.3rem]"
+                                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[1.3rem] relative overflow-hidden"
                                 style={{
                                     fontFamily: "'Space Grotesk', sans-serif",
                                     fontSize: "0.62rem",
@@ -368,8 +383,16 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                                     boxShadow: "0 4px 20px rgba(34,197,94,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
                                 }}
                             >
-                                <CheckCircle2 size={14} strokeWidth={2.5} />
-                                Finalize — {winner === "A" ? match.tA.name : match.tB.name} Wins
+                                {/* Shimmer sweep */}
+                                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[1.3rem]">
+                                    <div className="absolute -inset-full"
+                                        style={{
+                                            background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.15) 45%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.15) 55%, transparent 60%)",
+                                            animation: "shimmer 2.5s ease-in-out infinite",
+                                        }} />
+                                </div>
+                                <CheckCircle2 size={14} strokeWidth={2.5} className="relative z-10" />
+                                <span className="relative z-10">Finalize — {winner === "A" ? match.tA.name : match.tB.name} Wins</span>
                             </motion.button>
                         </div>
                     </motion.div>

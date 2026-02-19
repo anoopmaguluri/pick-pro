@@ -101,7 +101,7 @@ export default function MatchList({
             {matches && matches.length > 0 ? (
                 <>
                     {(hasSemis || hasFinal) && (
-                        <SectionLabel label="Pool Play" />
+                        <SectionLabel icon={<Swords size={10} />} label={`Pool Play · ${matches.length}`} />
                     )}
                     {matches.map((m, idx) => (
                         <MatchCard

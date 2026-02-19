@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useHaptic } from "../../../hooks/useHaptic";
-import { Plus, Trash2, UsersRound, Zap, Check, RotateCcw, Shuffle, X } from "lucide-react";
+import { Plus, Trash2, UsersRound, UserPlus, Zap, Check, RotateCcw, Shuffle, X } from "lucide-react";
 import PlayerAvatar from "../../common/PlayerAvatar";
 import LiquidButton from "../../common/LiquidButton";
 import LiquidTabBar from "../../common/LiquidTabBar";
@@ -35,17 +35,6 @@ export default function Setup({
 
     const benchedPlayers = sortedRoster.filter(p => !(data.draftPlayers || []).includes(p));
     const draftPlayers = data.draftPlayers || [];
-
-    // --- ANIMATION VARIANTS ---
-    const listVariants = {
-        hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { staggerChildren: 0.03 } }
-    };
-
-    const itemVariants = {
-        hidden: { opacity: 0, scale: 0.8 },
-        visible: { opacity: 1, scale: 1 }
-    };
 
     const handleAutoDraft = (fmt) => {
         const preview = prepareAutoTournament(fmt);
@@ -89,8 +78,15 @@ export default function Setup({
 
                         {/* Draft Input Card */}
                         <div className="p-5 rounded-[2rem]" style={glassCard}>
-                            <p className="text-[9px] font-black uppercase tracking-widest mb-4" style={{ color: "rgba(255,202,40,0.7)" }}>
+                            <p className="text-[9px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"
+                                style={{ color: "rgba(255,202,40,0.7)" }}>
                                 Draft Athletes
+                                {draftPlayers.length > 0 && (
+                                    <span className="px-2 py-0.5 rounded-full text-[8px] font-black"
+                                        style={{ background: "rgba(255,202,40,0.12)", color: "rgba(255,202,40,0.9)" }}>
+                                        {draftPlayers.length}
+                                    </span>
+                                )}
                             </p>
 
                             <form onSubmit={addPlayer} className="flex gap-2 mb-5">
@@ -107,37 +103,51 @@ export default function Setup({
                             </form>
 
                             {draftPlayers.length > 0 ? (
-                                <div className="grid grid-cols-2 gap-2 max-h-[180px] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+                                <div className="grid grid-cols-2 gap-2 max-h-[240px] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
                                     {draftPlayers.map((p) => (
                                         <motion.div layout initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} key={p}
-                                            className="flex justify-between items-center px-3 py-2 rounded-xl"
-                                            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                                            <div className="flex items-center gap-2">
-                                                <PlayerAvatar name={p} className="w-6 h-6 text-[8px]" />
+                                            className="flex justify-between items-center px-3 py-2.5 rounded-xl relative overflow-hidden"
+                                            style={{
+                                                background: "rgba(255,255,255,0.04)",
+                                                border: "1px solid rgba(255,255,255,0.08)",
+                                                backdropFilter: "blur(12px)",
+                                            }}>
+                                            {/* Green left accent */}
+                                            <div className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full"
+                                                style={{ background: "linear-gradient(to bottom, #22c55e, #16a34a)", boxShadow: "0 0 6px rgba(34,197,94,0.5)" }} />
+                                            <div className="flex items-center gap-2 pl-2">
+                                                <PlayerAvatar name={p} className="w-6 h-6 text-[8px] ring-1 ring-white/10" />
                                                 <span className="text-[10px] font-black uppercase tracking-tight text-white truncate max-w-[60px]">{p}</span>
                                             </div>
                                             <button onClick={() => toggleDraftPlayer(p, false)} style={{ color: "rgba(255,255,255,0.2)" }}
-                                                className="hover:text-red-400 transition-colors">
+                                                className="hover:text-red-400 transition-colors p-1">
                                                 <Trash2 size={13} />
                                             </button>
                                         </motion.div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="py-8 text-center rounded-xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>Draft is empty</p>
+                                <div className="py-8 text-center rounded-xl flex flex-col items-center gap-2"
+                                    style={{ border: "1px dashed rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.15)" }}>
+                                    <UserPlus size={20} style={{ color: "rgba(255,255,255,0.12)" }} />
+                                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.15)" }}>
+                                        Add players to get started
+                                    </p>
                                 </div>
                             )}
                         </div>
 
                         {/* The Bench */}
                         {benchedPlayers.length > 0 && (
-                            <div className="p-5 rounded-[2rem]" style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                            <div className="p-5 rounded-[2rem]" style={{ ...glassCard, background: "rgba(0,0,0,0.3)" }}>
                                 <p className="text-[9px] font-black uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>
                                     <UsersRound size={11} /> The Bench — Tap to Draft
+                                    <span className="ml-auto px-2 py-0.5 rounded-full text-[8px] font-black"
+                                        style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.3)" }}>
+                                        {benchedPlayers.length}
+                                    </span>
                                 </p>
                                 <div className="flex flex-wrap gap-2">
-                                    {/* Removed AnimatePresence to fix layout jank */}
                                     {benchedPlayers.map((p) => (
                                         <motion.button
                                             layout="position"
@@ -147,7 +157,7 @@ export default function Setup({
                                             key={p} onClick={() => toggleDraftPlayer(p, true)}
                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase transition-all"
                                             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}>
-                                            <PlayerAvatar name={p} className="w-5 h-5 text-[7px] grayscale opacity-50" />
+                                            <PlayerAvatar name={p} className="w-5 h-5 text-[7px] opacity-50" />
                                             {p}
                                             <Plus size={10} className="opacity-40" />
                                         </motion.button>
@@ -159,8 +169,17 @@ export default function Setup({
                         {/* Start Options */}
                         {draftPlayers.length >= 4 && (
                             <>
+                                {/* Divider */}
+                                <div className="flex items-center gap-3 py-1">
+                                    <div className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(255,255,255,0.08), transparent)" }} />
+                                    <span className="text-[8px] font-black uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.12)" }}>
+                                        Format
+                                    </span>
+                                    <div className="flex-1 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(255,255,255,0.08), transparent)" }} />
+                                </div>
+
                                 {/* Format Toggle - LiquidTabBar */}
-                                <div className="mb-4">
+                                <div className="mb-2">
                                     <LiquidTabBar
                                         tabs={[
                                             { id: "singles", label: "Singles" },
@@ -203,44 +222,67 @@ export default function Setup({
                         </div>
 
                         {/* ── MANUAL DRAFT BUILDER ────────────────────────────────────── */}
-                        <div className="mb-6">
-                            <h3 className="text-white/40 font-black text-[10px] uppercase tracking-widest pl-1 mb-3">
-                                Building Team {manualTeams.length + 1}
+                        <div className="p-4 rounded-[1.5rem]" style={glassCard}>
+                            <h3 className="text-[9px] font-black uppercase tracking-widest mb-3 flex items-center gap-2"
+                                style={{ color: "rgba(255,202,40,0.6)" }}>
+                                <span>Building Team {manualTeams.length + 1}</span>
+                                <span className="px-2 py-0.5 rounded-full text-[8px]"
+                                    style={{ background: "rgba(255,202,40,0.1)", color: "rgba(255,202,40,0.7)" }}>
+                                    {selectedPlayers.length}/2
+                                </span>
                             </h3>
 
                             <div className="flex items-center gap-2">
                                 {/* Slot 1 */}
-                                <div className={`flex-1 h-14 rounded-2xl flex items-center justify-center border transition-all relative overflow-hidden ${firstPick ? "bg-amber-500/20 border-amber-500/30" : "bg-white/5 border-white/10"}`}>
+                                <div className="flex-1 h-14 rounded-2xl flex items-center justify-center relative overflow-hidden"
+                                    style={{
+                                        background: firstPick ? "rgba(245,158,11,0.1)" : "rgba(255,255,255,0.03)",
+                                        border: firstPick ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(255,255,255,0.08)",
+                                        backdropFilter: "blur(12px)",
+                                        animation: !firstPick ? "slotPulse 2s ease-in-out infinite" : "none",
+                                    }}>
                                     {firstPick ? (
                                         <motion.div layoutId="pick1" className="flex items-center gap-2 text-amber-400 font-bold uppercase text-xs">
-                                            <PlayerAvatar name={firstPick} className="w-6 h-6 text-[8px]" />
+                                            <PlayerAvatar name={firstPick} className="w-6 h-6 text-[8px] ring-1 ring-amber-400/30" />
                                             {firstPick}
                                         </motion.div>
                                     ) : (
-                                        <span className="text-white/20 text-[10px] font-black uppercase tracking-widest">Player 1</span>
+                                        <span className="text-white/15 text-[10px] font-black uppercase tracking-widest">Player 1</span>
                                     )}
                                 </div>
 
-                                <div className="text-white/20 font-black text-xs">+</div>
+                                <div className="text-white/15 font-black text-xs">+</div>
 
                                 {/* Slot 2 */}
-                                <div className={`flex-1 h-14 rounded-2xl flex items-center justify-center border transition-all relative overflow-hidden ${secondPick ? "bg-amber-500/20 border-amber-500/30" : "bg-white/5 border-white/10"}`}>
+                                <div className="flex-1 h-14 rounded-2xl flex items-center justify-center relative overflow-hidden"
+                                    style={{
+                                        background: secondPick ? "rgba(245,158,11,0.1)" : "rgba(255,255,255,0.03)",
+                                        border: secondPick ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(255,255,255,0.08)",
+                                        backdropFilter: "blur(12px)",
+                                        animation: !secondPick && firstPick ? "slotPulse 2s ease-in-out infinite" : "none",
+                                    }}>
                                     {secondPick ? (
                                         <motion.div layoutId="pick2" className="flex items-center gap-2 text-amber-400 font-bold uppercase text-xs">
-                                            <PlayerAvatar name={secondPick} className="w-6 h-6 text-[8px]" />
+                                            <PlayerAvatar name={secondPick} className="w-6 h-6 text-[8px] ring-1 ring-amber-400/30" />
                                             {secondPick}
                                         </motion.div>
                                     ) : (
-                                        <span className="text-white/20 text-[10px] font-black uppercase tracking-widest">Player 2</span>
+                                        <span className="text-white/15 text-[10px] font-black uppercase tracking-widest">Player 2</span>
                                     )}
                                 </div>
 
-                                {/* Undo Button - Always visible if selection exists */}
+                                {/* Undo Button */}
                                 {selectedPlayers.length > 0 && (
                                     <motion.button
                                         whileTap={{ scale: 0.9 }}
                                         onClick={handleManualUndo}
-                                        className="h-14 w-14 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                                        className="h-14 w-14 rounded-2xl flex items-center justify-center"
+                                        style={{
+                                            background: "rgba(239,68,68,0.08)",
+                                            border: "1px solid rgba(239,68,68,0.15)",
+                                            color: "rgba(239,68,68,0.6)",
+                                            boxShadow: "0 0 12px rgba(239,68,68,0.08)",
+                                        }}>
                                         <RotateCcw size={18} />
                                     </motion.button>
                                 )}
@@ -249,30 +291,58 @@ export default function Setup({
 
                         {/* Completed Teams List */}
                         {manualTeams.length > 0 && (
-                            <div className="mb-6 space-y-2">
-                                <h3 className="text-white/40 font-black text-[10px] uppercase tracking-widest pl-1">
+                            <div className="space-y-2">
+                                <h3 className="text-[9px] font-black uppercase tracking-widest pl-1 flex items-center gap-2"
+                                    style={{ color: "rgba(255,255,255,0.25)" }}>
                                     Ready for Battle
+                                    <span className="px-2 py-0.5 rounded-full text-[8px] font-black"
+                                        style={{ background: "rgba(34,197,94,0.1)", color: "rgba(34,197,94,0.7)" }}>
+                                        {manualTeams.length}
+                                    </span>
                                 </h3>
                                 <div className="space-y-2">
                                     {manualTeams.map((t, i) => (
-                                        <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                                        <motion.div key={i} layout
+                                            initial={{ scale: 0.95, opacity: 0 }}
+                                            animate={{ scale: 1, opacity: 1 }}
+                                            className="flex items-center justify-between p-3 rounded-xl relative overflow-hidden"
+                                            style={{
+                                                background: "rgba(255,255,255,0.04)",
+                                                border: "1px solid rgba(255,255,255,0.07)",
+                                                backdropFilter: "blur(12px)",
+                                            }}>
                                             <div className="flex items-center gap-3">
-                                                <span className="text-[10px] font-bold text-white/30">#{i + 1}</span>
-                                                <div className="flex items-center gap-2 text-xs font-bold text-white/80 uppercase">
-                                                    <span>{t.p1}</span>
-                                                    <span className="text-white/20">+</span>
-                                                    <span>{t.p2}</span>
+                                                {/* Amber numbered badge */}
+                                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0"
+                                                    style={{
+                                                        background: "linear-gradient(135deg, rgba(255,202,40,0.2), rgba(245,124,0,0.15))",
+                                                        border: "1px solid rgba(255,202,40,0.2)",
+                                                        color: "rgba(255,202,40,0.9)",
+                                                    }}>
+                                                    {i + 1}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex -space-x-1.5">
+                                                        <PlayerAvatar name={t.p1} className="w-6 h-6 text-[8px] ring-1 ring-white/10 z-10" />
+                                                        <PlayerAvatar name={t.p2} className="w-6 h-6 text-[8px] ring-1 ring-white/10 z-0" />
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-white/80 uppercase">
+                                                        <span>{t.p1}</span>
+                                                        <span className="text-white/15">+</span>
+                                                        <span>{t.p2}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <button onClick={() => removeManualTeam(i)} className="p-2 text-white/20 hover:text-red-400 transition-colors">
                                                 <Trash2 size={14} />
                                             </button>
-                                        </div>
+                                        </motion.div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
+                        {/* Available Players */}
                         <div className="grid grid-cols-2 gap-3 mb-20">
                             {availablePlayersForManual.map((p) => (
                                 <motion.button whileTap={{ scale: 0.93 }} key={p} onClick={() => handleManualSelect(p)}
@@ -281,17 +351,33 @@ export default function Setup({
                                         ? { background: "linear-gradient(135deg, #FFCA28, #F57C00)", color: "#030712", boxShadow: "0 4px 14px rgba(255,202,40,0.3)" }
                                         : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }
                                     }>
-                                    <PlayerAvatar name={p} className="w-8 h-8 text-[10px]" />
+                                    <PlayerAvatar name={p} className={`w-8 h-8 text-[10px] ${selectedPlayers.includes(p) ? "" : "ring-2 ring-white/10"}`} />
                                     {p}
                                 </motion.button>
                             ))}
                         </div>
 
-                        {availablePlayersForManual.length < 2 && manualTeams.length > 0 && (
-                            <LiquidButton onClick={() => handleFormatSelection(manualTeams)} variant="primary"
-                                style={{ width: "100%", padding: "1.2rem", borderRadius: "1rem", fontSize: "0.8rem" }}>
-                                ⚡ Start Matches
-                            </LiquidButton>
+                        {/* Progress indicator + Start button */}
+                        {manualTeams.length > 0 && (
+                            <div className="space-y-3">
+                                {/* Progress chip */}
+                                <div className="flex items-center justify-center gap-2 py-2">
+                                    <span className="text-[9px] font-black uppercase tracking-widest"
+                                        style={{ color: "rgba(255,255,255,0.2)" }}>
+                                        {manualTeams.length} {manualTeams.length === 1 ? "team" : "teams"} ready
+                                        {availablePlayersForManual.length > 0 && (
+                                            <> · {availablePlayersForManual.length} {availablePlayersForManual.length === 1 ? "player" : "players"} remaining</>
+                                        )}
+                                    </span>
+                                </div>
+
+                                {availablePlayersForManual.length < 2 && (
+                                    <LiquidButton onClick={() => handleFormatSelection(manualTeams)} variant="primary"
+                                        style={{ width: "100%", padding: "1.2rem", borderRadius: "1rem", fontSize: "0.8rem" }}>
+                                        ⚡ Start Matches
+                                    </LiquidButton>
+                                )}
+                            </div>
                         )}
                     </motion.div>
                 )}
@@ -419,7 +505,7 @@ export default function Setup({
                     </motion.div>
                 )
                 }
-            </AnimatePresence >
+            </AnimatePresence>
         </>
     );
 }

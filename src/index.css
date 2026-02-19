@@ -1,7 +1,9 @@
 @import 'tailwindcss';
 
 /* ─── RESET & ROOT ─────────────────────────────────── */
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -25,21 +27,95 @@ body {
 }
 
 /* Mono spans (scores, stats) */
-.font-mono, [class*="tabular-nums"] {
+.font-mono,
+[class*="tabular-nums"] {
   font-family: 'DM Mono', 'Space Mono', monospace;
   letter-spacing: -0.04em;
 }
 
 /* ─── LIQUID BUTTON – ambient glow animation ─────────── */
 @keyframes liquidShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes breatheGlow {
+
+  0%,
+  100% {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  50% {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 12px rgba(255, 202, 40, 0.08);
+  }
+}
+
+@keyframes deucePulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes slotPulse {
+
+  0%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  50% {
+    border-color: rgba(255, 202, 40, 0.15);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes pulseRing {
-  0%   { transform: scale(1);   opacity: 0.6; }
-  100% { transform: scale(2.2); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
 }
 
 .liquid-btn {
@@ -59,24 +135,53 @@ body {
   animation: liquidShift 3s ease infinite;
 }
 
-/* Ripple element injected by JS */
+/* Ripple element injected by JS — liquid water-drop variant */
 .liquid-ripple {
   position: absolute;
   border-radius: 50%;
   transform: scale(0);
-  background: rgba(255, 255, 255, 0.35);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.12) 60%, transparent 100%);
   pointer-events: none;
-  animation: rippleOut 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation: rippleOut 0.65s cubic-bezier(0.12, 0.8, 0.32, 1) forwards;
+}
+
+/* Delete button gets a red-tinted ripple */
+.liquid-ripple-red {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  background: radial-gradient(circle, rgba(255, 120, 80, 0.6) 0%, rgba(255, 61, 0, 0.15) 60%, transparent 100%);
+  pointer-events: none;
+  animation: rippleOut 0.65s cubic-bezier(0.12, 0.8, 0.32, 1) forwards;
 }
 
 @keyframes rippleOut {
-  0%   { transform: scale(0);   opacity: 1; }
-  100% { transform: scale(3.5); opacity: 0; }
+  0% {
+    transform: scale(0);
+    opacity: 1;
+    filter: blur(0px);
+  }
+
+  60% {
+    opacity: 0.4;
+    filter: blur(3px);
+  }
+
+  100% {
+    transform: scale(4.5);
+    opacity: 0;
+    filter: blur(6px);
+  }
 }
 
 /* ─── SCROLLBAR HIDE ─────────────────────────────────── */
-.scrollbar-hide::-webkit-scrollbar { display: none; }
-.scrollbar-hide { scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+}
 
 /* ─── SELECTION ──────────────────────────────────────── */
 ::selection {

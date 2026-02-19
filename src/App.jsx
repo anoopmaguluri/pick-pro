@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { set, update, remove, ref } from "firebase/database";
 import { db } from "./services/firebase";
-import { AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Components
 import Modal from "./components/common/Modal";
@@ -38,6 +38,7 @@ function App() {
   const [matchFormat, setMatchFormat] = useState("doubles"); // "singles" | "doubles"
 
   // UI State
+  const [hubTab, setHubTab] = useState("events");
   const [dismissCelebration, setDismissCelebration] = useState(false);
   const [modal, setModal] = useState({
     show: false,
@@ -219,6 +220,8 @@ function App() {
       draftPlayers: [],
     });
     setNewTourneyName("");
+    setActiveTournamentId(id); // Switch to the new event
+    setHubTab("events"); // Ensure hub is on history when coming back
     triggerHaptic(50);
   };
 
@@ -391,7 +394,7 @@ function App() {
       <div className="absolute bottom-32 right-0 w-56 h-56 rounded-full blur-3xl pointer-events-none opacity-20" style={{ background: "rgba(236,72,153,0.1)" }} />
 
       <div className="relative z-10">
-        <div className="w-16 h-16 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-6" />
+        <div className="w-16 h-16 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-6 mx-auto" />
         <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white/40">Syncing Data</h2>
       </div>
     </div>
@@ -409,59 +412,79 @@ function App() {
         onCancel={() => setModal({ ...modal, show: false })}
       />
 
-      {activeTournamentId ? (
-        <TournamentView
-          data={data}
-          roster={roster}
-          isAdmin={isAdmin}
-          setIsAdmin={setIsAdmin}
-          setActiveTournamentId={setActiveTournamentId}
-          // Format
-          matchFormat={matchFormat}
-          setMatchFormat={setMatchFormat}
-          // Setup
-          newPlayer={newPlayer}
-          setNewPlayer={setNewPlayer}
-          addPlayer={addPlayer}
-          toggleDraftPlayer={toggleDraftPlayer}
-          promptAutoTournament={() => { }} // Deprecated, handled in Setup via prepare/commit
-          prepareAutoTournament={prepareAutoTournament}
-          commitAutoTournament={commitAutoTournament}
-          isManualMode={isManualMode}
-          setIsManualMode={setIsManualMode}
-          manualTeams={manualTeams}
-          handleManualSelect={handleManualSelect}
-          removeManualTeam={removeManualTeam}
-          handleFormatSelection={handleFormatSelection}
-          selectedPlayers={selectedPlayers}
-          // Match
-          adjustScore={adjustScore}
-          confirmMatch={confirmMatch}
-          confirmKnockout={confirmKnockout}
-          generateKnockouts={generateKnockouts}
-          // Standings
-          standings={standings}
-          handleStandingsLongPress={handleStandingsLongPress}
-          // Celebration
-          dismissCelebration={dismissCelebration}
-          setDismissCelebration={setDismissCelebration}
-          isTournamentOver={isTournamentOver}
-          tournamentWinner={tournamentWinner}
-        />
-      ) : (
-        <TournamentHub
-          tournaments={tournaments}
-          activeTournamentId={activeTournamentId}
-          setActiveTournamentId={setActiveTournamentId}
-          createTournament={createTournament}
-          deleteTournament={deleteTournament}
-          newTourneyName={newTourneyName}
-          setNewTourneyName={setNewTourneyName}
-          globalLeaderboard={globalLeaderboard}
-          isAdmin={isAdmin}
-          setIsAdmin={setIsAdmin}
-        />
-      )}
+      <AnimatePresence mode="wait" initial={false}>
+        {activeTournamentId ? (
+          <motion.div
+            key="tournament-view"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <TournamentView
+              data={data}
+              roster={roster}
+              isAdmin={isAdmin}
+              setIsAdmin={setIsAdmin}
+              setActiveTournamentId={setActiveTournamentId}
+              // Format
+              matchFormat={matchFormat}
+              setMatchFormat={setMatchFormat}
+              // Setup
+              newPlayer={newPlayer}
+              setNewPlayer={setNewPlayer}
+              addPlayer={addPlayer}
+              toggleDraftPlayer={toggleDraftPlayer}
+              promptAutoTournament={() => { }} // Deprecated, handled in Setup via prepare/commit
+              prepareAutoTournament={prepareAutoTournament}
+              commitAutoTournament={commitAutoTournament}
+              isManualMode={isManualMode}
+              setIsManualMode={setIsManualMode}
+              manualTeams={manualTeams}
+              handleManualSelect={handleManualSelect}
+              removeManualTeam={removeManualTeam}
+              handleFormatSelection={handleFormatSelection}
+              selectedPlayers={selectedPlayers}
+              // Match
+              adjustScore={adjustScore}
+              confirmMatch={confirmMatch}
+              confirmKnockout={confirmKnockout}
+              generateKnockouts={generateKnockouts}
+              // Standings
+              standings={standings}
+              handleStandingsLongPress={handleStandingsLongPress}
+              // Celebration
+              dismissCelebration={dismissCelebration}
+              setDismissCelebration={setDismissCelebration}
+              isTournamentOver={isTournamentOver}
+              tournamentWinner={tournamentWinner}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="tournament-hub"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <TournamentHub
+              tournaments={tournaments}
+              activeTournamentId={activeTournamentId}
+              setActiveTournamentId={setActiveTournamentId}
+              createTournament={createTournament}
+              deleteTournament={deleteTournament}
+              newTourneyName={newTourneyName}
+              setNewTourneyName={setNewTourneyName}
+              globalLeaderboard={globalLeaderboard}
+              isAdmin={isAdmin}
+              setIsAdmin={setIsAdmin}
+              hubTab={hubTab}
+              setHubTab={setHubTab}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </ErrorBoundary>
   );
 }

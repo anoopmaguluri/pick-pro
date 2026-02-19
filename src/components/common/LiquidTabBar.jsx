@@ -2,11 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from "react";
 import { motion, useSpring, useTransform } from "framer-motion";
 
 // ─── constants ───────────────────────────────────────────────────────────────
-const PILL_INSET = 4;    // px — gap between pill and container edge
+const PILL_INSET = 0;    // px — nested inside container padding
 const DRAG_THRESH = 8;    // px — movement before drag mode activates
 const TAP_MAX_MS = 250;  // ms — pointer-down duration treated as a tap
-// Pill corner radii — rest matches container (1.5rem=24px) minus padding (5px)
-const BASE_RADIUS = 19;   // px — pill corners at rest  (= 24 - 5)
+// Pill corner radii — matches container (24px) minus padding (6px)
+const BASE_RADIUS = 18;   // px — pill corners at rest
 const LEAD_RADIUS = 7;    // px — leading (pushing) edge during drag
 const TRAIL_RADIUS = 28;   // px — larger stretch radius
 const SPRING_SNAP = { type: "spring", stiffness: 220, damping: 25, mass: 1 }; // softer snap
@@ -158,15 +158,30 @@ export default function LiquidTabBar({
             pillSlotRef.current = snapped;
             onChange(tabs[snapped].id);
         } else {
-            // ── TAP: use clientX to decide which tab was tapped ──────────
-            // Use whole-container zone hit-test, not the pill position.
+            // ── TAP: identify which discrete tab was touched ─────────────
             const rect = getRect();
             if (rect) {
-                const slot = absoluteSlot(e.clientX, rect);
-                const snapped = snapToInt(slot);
-                setPillSlot(snapped);
-                pillSlotRef.current = snapped;
-                onChange(tabs[snapped].id);
+                const relativeX = e.clientX - rect.left;
+
+                // HYSTERESIS / BIAS: 
+                // We add a 15% bias to the currently active tab hitzone.
+                // This makes it "stickier" and less prone to accidental flips
+                // when clicking near the middle of the active tab.
+                const BIAS = 0.15 * rect.width;
+                const mid = rect.width / 2;
+
+                let snapper;
+                if (pillSlotRef.current === 0) {
+                    // Bias mid-point to the RIGHT (expand tab 0 hitzone)
+                    snapper = relativeX < (mid + BIAS) ? 0 : 1;
+                } else {
+                    // Bias mid-point to the LEFT (expand tab 1 hitzone)
+                    snapper = relativeX < (mid - BIAS) ? 0 : 1;
+                }
+
+                setPillSlot(snapper);
+                pillSlotRef.current = snapper;
+                onChange(tabs[snapper].id);
             }
         }
 
@@ -177,17 +192,17 @@ export default function LiquidTabBar({
 
     // ── render ───────────────────────────────────────────────────────────────
     const tabSlotW = 100 / tabCount;
-    const pillLeft = `calc(${pillSlot * tabSlotW}% + ${PILL_INSET}px)`;
-    const pillW = `calc(${tabSlotW}% - ${PILL_INSET * 2}px)`;
+    const pillLeft = `${pillSlot * tabSlotW}%`;
+    const pillW = `${tabSlotW}%`;
 
     return (
         <div
             ref={containerRef}
             className={`relative flex ${className}`}
             style={{
-                borderRadius: "1.5rem",
-                padding: "5px",
-                background: "rgba(0, 0, 0, 0.2)", // Dark glass container
+                borderRadius: "1.5rem", // 24px
+                padding: "6px",
+                background: "rgba(0, 0, 0, 0.2)", // Sleek dark glass
                 border: "1px solid rgba(255,255,255,0.08)",
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
@@ -205,9 +220,9 @@ export default function LiquidTabBar({
         >
             {/* ── LIQUID GLASS PILL ──────────────────────────────────────────── */}
             <motion.div
-                className="absolute top-[3px] bottom-[3px] pointer-events-none"
-                style={{ width: pillW }}
-                animate={{ left: pillLeft }}
+                className="absolute pointer-events-none"
+                style={{ top: 3, bottom: 3, width: `calc(${pillW} - 6px)` }}
+                animate={{ left: `calc(${pillLeft} + 3px)` }}
                 transition={dragging ? { duration: 0 } : SPRING_SNAP}
             >
                 <motion.div
@@ -220,7 +235,7 @@ export default function LiquidTabBar({
                         borderBottomRightRadius: rbr,
                         scaleX,
                         scaleY,
-                        borderRadius: "9999px", // pill shape
+                        borderRadius: `${BASE_RADIUS}px`,
                         background: "linear-gradient(135deg, rgba(255, 202, 40, 0.85) 0%, rgba(255, 111, 0, 0.95) 100%)",
                         backdropFilter: "blur(8px)",
                         WebkitBackdropFilter: "blur(8px)",
@@ -244,14 +259,15 @@ export default function LiquidTabBar({
                         style={{
                             padding: "10px 6px",
                             fontFamily: "'Space Grotesk', sans-serif",
-                            fontSize: "0.6rem",
+                            fontSize: "0.65rem",
                             fontWeight: 800,
                             letterSpacing: "0.12em",
                             textTransform: "uppercase",
                             color: isActive ? "#0F172A" : "rgba(255,255,255,0.4)",
                             textShadow: "none",
-                            transition: "color 0.28s ease, text-shadow 0.28s ease",
+                            transition: "color 0.28s ease",
                             pointerEvents: "none",
+                            paddingBottom: "11px", // Centering fix
                         }}
                     >
                         {tab.icon && (
