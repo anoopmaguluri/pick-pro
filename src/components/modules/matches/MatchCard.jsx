@@ -220,7 +220,7 @@ function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isW
                             className="block tabular-nums"
                             style={{
                                 fontFamily: "'DM Mono', 'Space Mono', monospace",
-                                fontSize: "5.5rem",
+                                fontSize: "4.5rem",
                                 lineHeight: 1,
                                 fontWeight: 900,
                                 color: isWinner ? "#FFCA28"
@@ -272,7 +272,7 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
 
     return (
         <div
-            className="relative rounded-[2.5rem] overflow-hidden"
+            className="relative rounded-[2.5rem] overflow-hidden transition-transform duration-300 hover:-translate-y-1"
             style={{
                 background: cardBg,
                 border: cardBorder,

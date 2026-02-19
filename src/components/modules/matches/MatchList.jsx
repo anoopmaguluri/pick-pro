@@ -83,7 +83,7 @@ export default function MatchList({
                 {hasSemis && (
                     <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-2">
                         <SectionLabel icon={<Swords size={10} />} label="Semi Finals" gold />
-                        <div className="space-y-4">
+                        <div className="flex flex-col xl:grid xl:grid-cols-2 gap-4">
                             {semis.map((m, idx) => (
                                 <MatchCard
                                     key={`k-${m.id}`}
@@ -103,14 +103,16 @@ export default function MatchList({
                     {(hasSemis || hasFinal) && (
                         <SectionLabel icon={<Swords size={10} />} label={`Pool Play · ${matches.length}`} />
                     )}
-                    {matches.map((m, idx) => (
-                        <MatchCard
-                            key={`m-${m.id || "no-id"}-${idx}`}
-                            match={m} idx={idx} type="pool" isAdmin={isAdmin}
-                            onScore={(team, delta) => adjustScore(idx, team, delta, false)}
-                            onConfirm={() => confirmMatch(idx)}
-                        />
-                    ))}
+                    <div className="flex flex-col xl:grid xl:grid-cols-2 gap-4">
+                        {matches.map((m, idx) => (
+                            <MatchCard
+                                key={`m-${m.id || "no-id"}-${idx}`}
+                                match={m} idx={idx} type="pool" isAdmin={isAdmin}
+                                onScore={(team, delta) => adjustScore(idx, team, delta, false)}
+                                onConfirm={() => confirmMatch(idx)}
+                            />
+                        ))}
+                    </div>
                 </>
             ) : (
                 !hasSemis && !hasFinal && (

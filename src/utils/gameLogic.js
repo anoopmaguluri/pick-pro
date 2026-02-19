@@ -218,8 +218,27 @@ export const buildMixerDoubles = (players) => {
  * numAdvancing=2 → Grand Final only (top 2)
  * numAdvancing=4 → Semi-finals + Grand Final (top 4: 1v4 and 2v3)
  */
-export const buildKnockouts = (topStandings, numAdvancing) => {
+export const buildKnockouts = (topStandings, numAdvancing, isMixer = false) => {
     const team = (s) => ({ name: s.name, p1: s.p1 ?? s.name, p2: s.p2 ?? null });
+
+    // Special Mixer Rule: Top 4 players form mixed pairs (1&3 vs 2&4) for a direct Final
+    if (isMixer && topStandings.length >= 4) {
+        return [{
+            id: "final",
+            type: "🏆 GRAND FINAL (MIXED)",
+            tA: {
+                name: `${topStandings[0].name}/${topStandings[2].name}`,
+                p1: topStandings[0].name,
+                p2: topStandings[2].name
+            },
+            tB: {
+                name: `${topStandings[1].name}/${topStandings[3].name}`,
+                p1: topStandings[1].name,
+                p2: topStandings[3].name
+            },
+            sA: 0, sB: 0, done: false,
+        }];
+    }
 
     if (numAdvancing <= 2 || topStandings.length < 4) {
         return [{
@@ -270,7 +289,7 @@ export const buildKnockouts = (topStandings, numAdvancing) => {
  * `qCount` — number of qualifying spots (2 or 4).
  * `totalMatchesEach` — total matches each entry is scheduled to play.
  */
-export const determineStatus = (sorted, qCount, totalMatchesEach) => {
+export const determineStatus = (sorted, qCount, totalMatchesEach, allMatchesFinished = false) => {
     const n = sorted.length;
     if (n === 0) return;
 
@@ -288,27 +307,62 @@ export const determineStatus = (sorted, qCount, totalMatchesEach) => {
         return;
     }
 
-    const allDone = sorted.every((t) => t.rem === 0);
+    const calculatedAllDone = sorted.every((t) => t.rem === 0);
+
+    // If explicit flag is true OR calculated check passes
+    if (allMatchesFinished || calculatedAllDone) {
+        sorted.forEach((t, i) => {
+            t.status = i < qCount ? "Q" : "E";
+        });
+        return;
+    }
 
     sorted.forEach((t, i) => {
-        if (allDone) {
-            t.status = i < qCount ? "Q" : "E";
-            return;
-        }
 
         const definiteBetter = sorted.filter((o) => (o.w || 0) > t.maxWins).length;
         if (definiteBetter >= qCount) {
             t.status = "E";
-            return;
+        } else {
+            const definiteWorse = sorted.filter((o) => o.maxWins < (t.w || 0)).length;
+            if (definiteWorse >= n - qCount) {
+                t.status = "Q";
+            } else {
+                t.status = "pending";
+            }
         }
 
-        const definiteWorse = sorted.filter((o) => o.maxWins < (t.w || 0)).length;
-        if (definiteWorse >= n - qCount) {
-            t.status = "Q";
-            return;
+        // --- Qualification Analysis Heuristic ---
+        const lastQSpot = sorted[qCount - 1];
+        const winsAtLine = lastQSpot ? lastQSpot.w : 0;
+
+        // Wins Needed: Minimum wins to reach the current line (simplified)
+        const needed = Math.max(0, winsAtLine - (t.w || 0));
+
+        // Heuristic Probability: 0 to 100
+        let prob = 50;
+        if (t.status === "Q") {
+            prob = 100;
+        } else if (t.status === "E") {
+            prob = 0;
+        } else {
+            const diffFromLine = (t.w || 0) - winsAtLine;
+            if (i < qCount) {
+                // Above the line
+                prob = 60 + (diffFromLine * 10) + ((qCount - i) * 2);
+            } else {
+                // Below the line
+                prob = 40 + (diffFromLine * 10) - ((i - qCount) * 5);
+            }
         }
 
-        t.status = "pending";
+        // Adjust for remaining matches logically
+        if (t.rem === 0 && i >= qCount && t.status !== "Q") prob = 0;
+        if (t.rem === 0 && i < qCount && t.status !== "E") prob = 100;
+
+        t.analysis = {
+            winsNeeded: needed,
+            probability: Math.min(99, Math.max(1, prob))
+        };
     });
 };
 

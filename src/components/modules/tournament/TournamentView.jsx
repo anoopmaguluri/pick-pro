@@ -105,8 +105,21 @@ export default function TournamentView({
         return matches.length > 0 && matches.every((m) => m && m.done);
     }, [data?.matches]);
 
+    // Celebration Logic: Only show if tournament just finished (transition),
+    // or if we haven't dismissed it yet.
+    // If we load the page and it's ALREADY over, we auto-dismiss to be polite.
+    const wasOverOnMount = React.useRef(isTournamentOver);
+
+    React.useEffect(() => {
+        if (wasOverOnMount.current) {
+            setDismissCelebration(true);
+        }
+    }, [setDismissCelebration]);
+
+
+
     return (
-        <div className="max-w-md mx-auto h-[100dvh] flex flex-col relative overflow-hidden text-white"
+        <div className="w-full max-w-5xl mx-auto h-[100dvh] flex flex-col relative overflow-hidden text-white"
             style={{ background: "radial-gradient(ellipse 120% 80% at 50% -10%, rgba(99,102,241,0.15) 0%, transparent 60%), radial-gradient(ellipse 80% 60% at 80% 80%, rgba(236,72,153,0.08) 0%, transparent 50%), #030712" }}>
 
             {/* Ambient orbs */}
@@ -183,8 +196,14 @@ export default function TournamentView({
             </AnimatePresence>
 
             {/* HEADER */}
-            <header className="flex-none px-5 py-4 flex justify-between items-center relative z-50"
-                style={{ background: "linear-gradient(to bottom, rgba(3,7,18,0.9), transparent)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <header className="fixed top-0 inset-x-0 z-50 px-5 py-4 flex justify-between items-center"
+                style={{
+                    background: "rgba(3,7,18,0.7)",
+                    backdropFilter: "blur(20px) saturate(180%)",
+                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    boxShadow: "0 4px 30px rgba(0,0,0,0.5)"
+                }}>
                 <motion.button whileTap={{ scale: 0.88 }}
                     onClick={() => { triggerHaptic(50); setActiveTournamentId(null); }}
                     className="w-10 h-10 rounded-2xl flex items-center justify-center"
@@ -212,7 +231,7 @@ export default function TournamentView({
             </header>
 
             {/* MAIN SCROLL */}
-            <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain relative z-10"
+            <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain relative z-10 pt-[72px]"
                 style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", scrollbarWidth: "none" }}>
                 <div className="p-5 pb-36">
                     {isSetupMode ? (
@@ -238,61 +257,75 @@ export default function TournamentView({
                         />
                     ) : (
                         <div className="pb-6">
-                            <AnimatePresence mode="wait">
-                                {activeTab === "matches" ? (
-                                    <motion.div
-                                        key="matches"
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 10 }}
-                                        transition={{ duration: 0.2, ease: "easeOut" }}
-                                    >
-                                        <MatchList
-                                            matches={data.matches} knockouts={data.knockouts}
-                                            isAdmin={isAdmin} adjustScore={adjustScore}
-                                            confirmMatch={confirmMatch} confirmKnockout={confirmKnockout}
-                                        />
-                                    </motion.div>
-                                ) : (
-                                    <motion.div
-                                        key="standings"
-                                        initial={{ opacity: 0, x: 10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -10 }}
-                                        transition={{ duration: 0.2, ease: "easeOut" }}
-                                    >
-                                        <StandingsTable
-                                            standings={standings} isAdmin={isAdmin}
-                                            handleStandingsLongPress={handleStandingsLongPress}
-                                            isKnockoutReady={allMatchesDone}
-                                            generateKnockouts={generateKnockouts}
-                                            isKnockoutStarted={data.knockouts?.length > 0}
-                                            qualifyCount={qCount}
-                                        />
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                            {/* 
+                                Mobile (default): Show only the active tab.
+                                Tablet/Desktop (md:): Show both side-by-side in a responsive grid.
+                            */}
+                            <div className="md:grid md:grid-cols-12 md:gap-6 md:items-start h-full">
+
+                                {/* Matches Column: hidden on mobile if not active, shows on md+ taking 7 cols */}
+                                <div className={`${activeTab === "matches" ? "block" : "hidden"} md:block md:col-span-7`}>
+                                    <AnimatePresence mode="wait">
+                                        <motion.div
+                                            key="matches"
+                                            initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                                            transition={{ duration: 0.2, ease: "easeOut" }}
+                                        >
+                                            <MatchList
+                                                matches={data.matches} knockouts={data.knockouts}
+                                                isAdmin={isAdmin} adjustScore={adjustScore}
+                                                confirmMatch={confirmMatch} confirmKnockout={confirmKnockout}
+                                            />
+                                        </motion.div>
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* Standings Column: hidden on mobile if not active, shows on md+ taking 5 cols */}
+                                <div className={`${activeTab === "standings" ? "block" : "hidden"} md:block md:col-span-5`}>
+                                    <AnimatePresence mode="wait">
+                                        <motion.div
+                                            key="standings"
+                                            initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                                            transition={{ duration: 0.2, ease: "easeOut" }}
+                                        >
+                                            <div className="md:sticky md:top-[88px]">
+                                                <StandingsTable
+                                                    standings={standings} isAdmin={isAdmin}
+                                                    isKnockoutReady={allMatchesDone}
+                                                    generateKnockouts={generateKnockouts}
+                                                    isKnockoutStarted={data.knockouts?.length > 0}
+                                                    qualifyCount={qCount}
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    </AnimatePresence>
+                                </div>
+
+                            </div>
                         </div>
                     )}
                 </div>
             </main>
 
-            {/* BOTTOM TAB BAR */}
+            {/* BOTTOM TAB BAR - FIXED GLASS */}
             {!isSetupMode && (
-                <div className="flex-none absolute bottom-0 left-0 right-0 z-50">
-                    <div className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
-                        style={{ background: "linear-gradient(to top, #030712 40%, rgba(3,7,18,0.8) 70%, transparent)" }} />
-                    <div className="relative px-6 pb-8 pt-4">
-                        <LiquidTabBar
-                            tabs={[
-                                { id: "matches", label: "Matches", icon: <Swords size={16} /> },
-                                { id: "standings", label: "Standings", icon: <TrendingUp size={16} /> },
-                            ]}
-                            activeTab={activeTab}
-                            onChange={(id) => { triggerHaptic(30); setActiveTab(id); }}
-                            style={{ maxWidth: 300, margin: "0 auto" }}
-                        />
-                    </div>
+                <div className="md:hidden fixed bottom-0 inset-x-0 z-50 pb-8 pt-4 px-6 rounded-t-3xl"
+                    style={{
+                        background: "rgba(3,7,18,0.7)",
+                        backdropFilter: "blur(20px) saturate(180%)",
+                        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                        borderTop: "1px solid rgba(255,255,255,0.06)",
+                        boxShadow: "0 -4px 30px rgba(0,0,0,0.5)",
+                    }}>
+                    <LiquidTabBar
+                        tabs={[
+                            { id: "matches", label: "Matches", icon: <Swords size={16} /> },
+                            { id: "standings", label: "Standings", icon: <TrendingUp size={16} /> },
+                        ]}
+                        activeTab={activeTab}
+                        onChange={(id) => { triggerHaptic(30); setActiveTab(id); }}
+                        style={{ maxWidth: 300, margin: "0 auto" }}
+                    />
                 </div>
             )}
         </div>

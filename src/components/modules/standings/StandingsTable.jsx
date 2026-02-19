@@ -7,7 +7,7 @@ import LiquidButton from "../../common/LiquidButton";
 export default function StandingsTable({
     standings,
     isAdmin,
-    handleStandingsLongPress,
+    // handleStandingsLongPress, // Removed
     isKnockoutReady,
     generateKnockouts,
     isKnockoutStarted,
@@ -24,22 +24,28 @@ export default function StandingsTable({
     return (
         <motion.div key="standings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
 
-            {/* Table Card */}
-            <div className="rounded-[2rem] overflow-hidden mb-6"
+            {/* Command Center Panel */}
+            <div className="rounded-[2rem] overflow-hidden mb-6 relative group"
                 style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    backdropFilter: "blur(20px)",
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)",
+                    background: "linear-gradient(180deg, rgba(3,7,18,0.7) 0%, rgba(0,0,0,0.9) 100%)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    backdropFilter: "blur(24px)",
+                    boxShadow: "0 24px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 30px rgba(255,255,255,0.02)",
                 }}>
 
+                {/* Top edge sci-fi glow */}
+                <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
+
+                {/* Scanner line effect (very subtle texture) */}
+                <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[linear-gradient(transparent_50%,rgba(255,255,255,1)_50%)] bg-[length:100%_4px]" />
+
                 {/* Header */}
-                <div className="px-5 py-3 flex items-center justify-between"
+                <div className="px-5 py-4 flex items-center justify-between relative z-10"
                     style={{
-                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                        background: "linear-gradient(135deg, rgba(255,202,40,0.1), transparent)",
+                        borderBottom: "1px solid rgba(255,255,255,0.05)",
+                        background: "linear-gradient(90deg, rgba(255,202,40,0.08) 0%, transparent 100%)",
                     }}>
-                    <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest"
+                    <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest leading-none"
                         style={{ color: "rgba(255,202,40,0.8)" }}>
                         {/* Pulsing LIVE dot */}
                         <span className="relative flex h-2 w-2">
@@ -50,11 +56,12 @@ export default function StandingsTable({
                         </span>
                         Live Standings
                     </span>
-                    <div className="flex gap-4 text-[9px] font-black uppercase tracking-wider"
+                    <div className="flex gap-3 text-[9px] font-black uppercase tracking-wider leading-none"
                         style={{ color: "rgba(255,255,255,0.25)" }}>
-                        <span style={{ width: 20, textAlign: "center" }}>W</span>
-                        <span style={{ width: 28, textAlign: "center" }}>PD</span>
-                        <span style={{ width: 16, textAlign: "center" }}>P</span>
+                        <span style={{ width: 24, textAlign: "center" }}>MP</span>
+                        <span style={{ width: 24, textAlign: "center" }}>W</span>
+                        <span style={{ width: 32, textAlign: "center" }}>PD</span>
+                        <span style={{ width: 24, textAlign: "center" }}>PTS</span>
                     </div>
                 </div>
 
@@ -66,15 +73,22 @@ export default function StandingsTable({
                         { color: "#CD7F32", shadow: "rgba(205,127,50,0.5)", glow: "0 0 12px rgba(205,127,50,0.4)" },
                     ];
                     const rank = rankColors[i];
-                    const isQ = t.status === "Q";
-                    const isE = t.status === "E";
 
-                    // Only show cutoff separator when there are actually Q OR E rows
-                    const hasDefiniteStatuses = standings.some((s) => s.status === "Q" || s.status === "E");
-                    const showCutoff = hasDefiniteStatuses && i === qCount && !isKnockoutStarted;
+                    const anyMatchesPlayed = standings.some(s => s.p > 0);
+
+                    // ── STATUS LOGIC ──
+                    // Projected Status: only show if games have been played and probability is convincing
+                    const isProjectedQ = anyMatchesPlayed && (t.status === "Q" || (t.analysis && t.analysis.probability >= 60));
+                    const isProjectedE = anyMatchesPlayed && (t.status === "E" || (t.analysis && t.analysis.probability <= 40));
+
+                    // Confirmed Status: mathematically guaranteed (from determineStatus logic)
+                    const isConfirmedQ = t.status === "Q";
+                    const isConfirmedE = t.status === "E";
 
                     // Win-rate for progress bar (relative to max wins)
                     const winProgress = maxWins > 0 ? (t.w / maxWins) * 100 : 0;
+
+                    const showCutoff = anyMatchesPlayed && i === qCount && !isKnockoutStarted && !isConfirmedQ && !isConfirmedE;
 
                     return (
                         <React.Fragment key={t.name}>
@@ -92,29 +106,27 @@ export default function StandingsTable({
                                 </div>
                             )}
                             <motion.div layout
-                                className="flex items-center px-5 py-3.5 relative overflow-hidden"
+                                className="flex items-center px-5 py-4 relative overflow-hidden group hover:bg-white/[0.02] transition-colors"
                                 style={{
-                                    borderBottom: "1px solid rgba(255,255,255,0.04)",
-                                    background: isE
-                                        ? "linear-gradient(135deg, rgba(239,68,68,0.04), rgba(239,68,68,0.01))"
-                                        : isQ
-                                            ? "linear-gradient(135deg, rgba(34,197,94,0.06), transparent)"
-                                            : "transparent",
-                                    opacity: isE ? 0.45 : 1,
+                                    borderBottom: "1px solid rgba(255,255,255,0.03)",
+                                    background: "transparent",
+                                    borderLeft: isProjectedQ ? "3px solid #4ADE80" : isProjectedE ? "3px solid #F87171" : "3px solid transparent",
+                                    opacity: isConfirmedE ? 0.45 : 1,
+                                    boxShadow: isProjectedQ ? "inset 10px 0 20px -10px rgba(74,222,128,0.2)" : isProjectedE ? "inset 10px 0 20px -10px rgba(248,113,113,0.15)" : "none",
                                 }}
                             >
                                 {/* Win-rate progress bar (background) */}
                                 <div className="absolute inset-y-0 left-0 pointer-events-none"
                                     style={{
                                         width: `${winProgress}%`,
-                                        background: isQ
-                                            ? "linear-gradient(90deg, rgba(34,197,94,0.06) 0%, rgba(34,197,94,0.02) 100%)"
-                                            : "linear-gradient(90deg, rgba(255,202,40,0.04) 0%, rgba(255,202,40,0.01) 100%)",
+                                        background: isProjectedQ
+                                            ? "linear-gradient(90deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.01) 100%)"
+                                            : "linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
                                         transition: "width 0.5s ease",
                                     }} />
 
                                 {/* Rank */}
-                                <div className="w-6 text-center font-black text-sm mr-3 shrink-0 relative z-10" style={{
+                                <div className="w-6 text-center font-black text-sm mr-3 shrink-0 relative z-10 flex items-center justify-center leading-none" style={{
                                     color: rank ? rank.color : "rgba(255,255,255,0.2)",
                                     textShadow: rank ? rank.glow : "none",
                                 }}>
@@ -122,32 +134,43 @@ export default function StandingsTable({
                                 </div>
 
                                 {/* Avatars */}
-                                <div className="flex -space-x-1.5 mr-3 shrink-0 relative z-10">
+                                <div className="flex -space-x-1.5 mr-3 shrink-0 relative z-10 items-center">
                                     {t.p1
-                                        ? <><PlayerAvatar name={t.p1} className="w-8 h-8 text-[10px] z-10 ring-2 ring-white/10" />{t.p2 && <PlayerAvatar name={t.p2} className="w-8 h-8 text-[10px] z-0 ring-2 ring-white/10" />}</>
-                                        : <PlayerAvatar name={t.name} className="w-8 h-8 text-[10px] ring-2 ring-white/10" />
+                                        ? <><PlayerAvatar name={t.p1} className="w-8 h-8 text-[10px] z-10 ring-2 ring-white/10 shadow-[0_4px_10px_rgba(0,0,0,0.5)]" />{t.p2 && <PlayerAvatar name={t.p2} className="w-8 h-8 text-[10px] z-0 ring-2 ring-[#030712] shadow-[0_4px_10px_rgba(0,0,0,0.5)]" />}</>
+                                        : <PlayerAvatar name={t.name} className="w-8 h-8 text-[10px] ring-2 ring-white/10 shadow-[0_4px_10px_rgba(0,0,0,0.5)]" />
                                     }
                                 </div>
 
                                 {/* Name + Form Streak */}
-                                <div className="flex-1 min-w-0 relative z-10">
-                                    <p className={`text-[12px] font-black uppercase tracking-tight text-white truncate leading-tight ${isE ? "line-through decoration-red-500/40" : ""}`}>
-                                        {t.name}
-                                    </p>
-                                    {/* Streak bar — larger, more readable */}
+                                <div className="flex-1 min-w-0 relative z-10 flex flex-col justify-center">
+                                    <div className="flex items-center gap-1.5 leading-none">
+                                        <p className={`text-[12px] font-black uppercase tracking-tight text-white truncate leading-none ${isConfirmedE ? "line-through decoration-red-500/40" : ""}`}>
+                                            {t.name}
+                                        </p>
+                                        {/* Confirmed Qualification Icon */}
+                                        {isConfirmedQ && (
+                                            <span className="text-[10px] text-green-400 leading-none">✓</span>
+                                        )}
+                                        {/* Confirmed Elimination Icon - Optional, or just rely on transparency/line-through */}
+                                        {isConfirmedE && (
+                                            <span className="text-[10px] text-red-400/50 leading-none">🔒</span>
+                                        )}
+                                    </div>
+
+                                    {/* Streak bar */}
                                     <div className="flex gap-[3px] mt-1.5">
                                         {t.form.slice(-6).map((res, fIdx) => (
                                             <div key={fIdx}
-                                                className="rounded-full"
+                                                className="rounded-sm"
                                                 style={{
                                                     width: 6,
-                                                    height: 6,
+                                                    height: 4,
                                                     background: res === "W"
                                                         ? "linear-gradient(135deg, #4ADE80, #22c55e)"
-                                                        : "rgba(239,68,68,0.45)",
+                                                        : "rgba(239,68,68,0.6)",
                                                     boxShadow: res === "W"
-                                                        ? "0 0 6px rgba(74,222,128,0.6)"
-                                                        : "0 0 4px rgba(239,68,68,0.3)",
+                                                        ? "0 0 8px rgba(74,222,128,0.6)"
+                                                        : "0 0 4px rgba(239,68,68,0.4)",
                                                 }}
                                             />
                                         ))}
@@ -155,23 +178,31 @@ export default function StandingsTable({
                                 </div>
 
                                 {/* Stats */}
-                                <div className="flex gap-4 shrink-0 relative z-10">
-                                    <span className="w-5 text-center text-sm font-black text-white">{t.w}</span>
-                                    <span className={`w-7 text-center text-xs font-bold ${t.pd > 0 ? "text-green-400" : t.pd < 0 ? "text-red-400" : "text-white/30"}`}>
+                                <div className="flex gap-3 shrink-0 relative z-10 items-center">
+                                    <span className="w-6 text-center text-xs font-bold text-white/40 leading-none">{t.p}</span>
+                                    <span className="w-6 text-center text-sm font-black text-white leading-none">{t.w}</span>
+                                    <span className={`w-8 text-center text-xs font-bold leading-none ${t.pd > 0 ? "text-green-400" : t.pd < 0 ? "text-red-400" : "text-white/30"}`}>
                                         {t.pd > 0 ? "+" : ""}{t.pd}
                                     </span>
-                                    <span className="w-4 text-center text-xs font-bold" style={{ color: "rgba(255,255,255,0.3)" }}>{t.p}</span>
+                                    <span className="w-6 text-center text-sm font-black text-amber-400 leading-none">{t.w}</span>
                                 </div>
 
-                                {/* Q badge — green bar on right */}
-                                {isQ && (
+                                {/* Status Bars (Right Edge) */}
+                                {isProjectedQ && (
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1.5 h-8 rounded-full"
-                                        style={{ background: "linear-gradient(to bottom, #22c55e, #16a34a)", boxShadow: "0 0 8px rgba(34,197,94,0.6)" }} />
+                                        style={{
+                                            background: "linear-gradient(to bottom, #22c55e, #16a34a)",
+                                            boxShadow: isConfirmedQ ? "0 0 8px rgba(34,197,94,0.6)" : "none",
+                                            opacity: isConfirmedQ ? 1 : 0.4
+                                        }} />
                                 )}
-                                {/* E badge — red bar */}
-                                {isE && (
+                                {isProjectedE && (
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1.5 h-8 rounded-full"
-                                        style={{ background: "linear-gradient(to bottom, #ef4444, #dc2626)", boxShadow: "0 0 6px rgba(239,68,68,0.5)", opacity: 0.5 }} />
+                                        style={{
+                                            background: "linear-gradient(to bottom, #ef4444, #dc2626)",
+                                            boxShadow: isConfirmedE ? "0 0 6px rgba(239,68,68,0.5)" : "none",
+                                            opacity: isConfirmedE ? 0.6 : 0.2
+                                        }} />
                                 )}
                             </motion.div>
                         </React.Fragment>
@@ -188,13 +219,7 @@ export default function StandingsTable({
                 </LiquidButton>
             )}
 
-            {isAdmin && (
-                <div className="mt-4 text-center" onContextMenu={(e) => { e.preventDefault(); handleStandingsLongPress(); }}>
-                    <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.12)" }}>
-                        Long press to edit
-                    </p>
-                </div>
-            )}
+            {/* Long press section removed */}
         </motion.div>
     );
 }

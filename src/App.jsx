@@ -14,6 +14,7 @@ import { useTournaments } from "./hooks/useTournaments";
 import { useScoring } from "./hooks/useScoring";
 import { useHaptic } from "./hooks/useHaptic";
 import { processMatches, determineStatus, buildPairedTeams, buildRoundRobin, buildSinglesRoundRobin, buildMixerDoubles, buildKnockouts, qualifyCount } from "./utils/gameLogic";
+import { prepareAutoTournamentResult } from "./utils/tournamentBuilder";
 
 function App() {
   const { tournaments, roster, loading } = useTournaments();
@@ -76,8 +77,11 @@ function App() {
   const standings = useMemo(() => {
     if (!data) return [];
 
+    // Check if tournament is fully complete (all scheduled matches done)
+    const allMatchesDone = data.matches && data.matches.length > 0 && data.matches.every(m => m.done);
+
     // ── FIXED TEAMS (even players + doubles) ──────────────────────────────────
-    if (data.format === "pairs" && data.teams) {
+    if ((data.format === "pairs" || data.format === "fixed") && data.teams) {
       const teamStats = {};
       data.teams.forEach((t) => {
         teamStats[t.name] = { name: t.name, p1: t.p1, p2: t.p2, p: 0, w: 0, l: 0, pd: 0, form: [] };
@@ -106,7 +110,7 @@ function App() {
       );
       const qCount = qualifyCount(sortedTeams.length);
       // For fixed teams (N teams), each team plays N-1 matches
-      determineStatus(sortedTeams, qCount, sortedTeams.length - 1);
+      determineStatus(sortedTeams, qCount, sortedTeams.length - 1, allMatchesDone);
       return sortedTeams;
     }
 
@@ -139,7 +143,7 @@ function App() {
       matchesPerPlayer = counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : sorted.length - 1;
     }
 
-    determineStatus(sorted, qCount, matchesPerPlayer);
+    determineStatus(sorted, qCount, matchesPerPlayer, allMatchesDone);
     return sorted;
   }, [data]);
 
@@ -268,36 +272,7 @@ function App() {
    * Returns: { format, teams, matches, players }
    */
   const prepareAutoTournament = (fmt) => {
-    const players = [...data.draftPlayers];
-    // Fisher-Yates shuffle
-    for (let i = players.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [players[i], players[j]] = [players[j], players[i]];
-    }
-
-    const isEven = players.length % 2 === 0;
-    const isDouble = fmt === "doubles";
-
-    let format, teams, matches;
-
-    if (!isDouble) {
-      // SINGLES — individual 1v1 round-robin
-      format = "singles";
-      teams = null;
-      matches = buildSinglesRoundRobin(players);
-    } else if (isEven) {
-      // EVEN + DOUBLES — fixed teams, team round-robin, team standings
-      format = "pairs";
-      teams = buildPairedTeams(players);
-      matches = buildRoundRobin(teams);
-    } else {
-      // ODD + DOUBLES — mixer: unique teams, individual standings
-      format = "mixer";
-      teams = null;
-      matches = buildMixerDoubles(players);
-    }
-
-    return { format, teams, matches, players };
+    return prepareAutoTournamentResult(fmt, data.draftPlayers);
   };
 
   /* 
@@ -377,7 +352,8 @@ function App() {
       showAlert("Error", `Need at least ${qCount} teams to generate knockouts.`);
       return;
     }
-    const knockouts = buildKnockouts(standings.slice(0, qCount), qCount);
+    const isMixer = data?.format === "mixer";
+    const knockouts = buildKnockouts(standings.slice(0, qCount), qCount, isMixer);
     set(ref(db, `tournaments/${activeTournamentId}/knockouts`), knockouts);
     triggerHaptic([50, 50, 100]);
   };
@@ -435,7 +411,6 @@ function App() {
               setNewPlayer={setNewPlayer}
               addPlayer={addPlayer}
               toggleDraftPlayer={toggleDraftPlayer}
-              promptAutoTournament={() => { }} // Deprecated, handled in Setup via prepare/commit
               prepareAutoTournament={prepareAutoTournament}
               commitAutoTournament={commitAutoTournament}
               isManualMode={isManualMode}

@@ -48,7 +48,7 @@ export default function TournamentHub({
     );
 
     return (
-        <div className="max-w-md mx-auto h-[100dvh] flex flex-col relative overflow-hidden"
+        <div className="w-full max-w-5xl mx-auto h-[100dvh] flex flex-col relative overflow-hidden"
             style={{ background: "radial-gradient(ellipse 120% 80% at 50% -10%, rgba(99,102,241,0.15) 0%, transparent 60%), radial-gradient(ellipse 80% 60% at 80% 80%, rgba(236,72,153,0.08) 0%, transparent 50%), #030712" }}>
 
             <Modal
@@ -72,79 +72,88 @@ export default function TournamentHub({
             <div className="absolute bottom-1/4 right-0 w-56 h-56 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(236,72,153,0.12)" }} />
             <div className="absolute top-1/3 right-1/4 w-40 h-40 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(255,109,0,0.08)" }} />
 
-            {/* HEADER — frosted glass */}
-            <header className="flex-none px-6 pt-12 pb-4 flex justify-between items-end relative z-10"
+            {/* ── STICKY GLASS HEADER (Logo + Search + Tabs) ── */}
+            <div className="fixed top-0 inset-x-0 z-50 rounded-b-3xl overflow-hidden"
                 style={{
-                    background: "linear-gradient(to bottom, rgba(3,7,18,0.95), rgba(3,7,18,0.6))",
+                    background: "rgba(3,7,18,0.7)",
                     backdropFilter: "blur(20px) saturate(180%)",
                     WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    boxShadow: "0 4px 30px rgba(0,0,0,0.5)",
                 }}>
-                <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                        <div className="w-7 h-7 rounded-xl flex items-center justify-center"
-                            style={{ background: "linear-gradient(135deg, #FFCA28, #F57C00)", boxShadow: "0 0 16px rgba(255,202,40,0.4)" }}>
-                            <Trophy size={14} className="text-[#030712]" strokeWidth={3} />
+
+                {/* HEADER */}
+                <header className="flex-none px-6 pt-12 pb-4 flex justify-between items-end relative z-10">
+                    <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                            <div className="w-7 h-7 rounded-xl flex items-center justify-center"
+                                style={{ background: "linear-gradient(135deg, #FFCA28, #F57C00)", boxShadow: "0 0 16px rgba(255,202,40,0.4)" }}>
+                                <Trophy size={14} className="text-[#030712]" strokeWidth={3} />
+                            </div>
+                            <h1 className="text-2xl font-black tracking-tight text-white" style={{ textShadow: "0 0 30px rgba(99,102,241,0.5)" }}>
+                                PICK<span style={{ color: "#FFCA28" }}>PRO</span>
+                            </h1>
                         </div>
-                        <h1 className="text-2xl font-black tracking-tight text-white" style={{ textShadow: "0 0 30px rgba(99,102,241,0.5)" }}>
-                            PICK<span style={{ color: "#FFCA28" }}>PRO</span>
-                        </h1>
+                        <p className="text-[10px] uppercase font-bold tracking-[0.25em]" style={{ color: "rgba(255,202,40,0.6)" }}>
+                            Tournament Edition
+                        </p>
                     </div>
-                    <p className="text-[10px] uppercase font-bold tracking-[0.25em]" style={{ color: "rgba(255,202,40,0.6)" }}>
-                        Tournament Edition
-                    </p>
+
+                    <LiquidButton
+                        onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }}
+                        variant={isAdmin ? "primary" : "ghost"}
+                        style={{ width: 36, height: 36, padding: 0, borderRadius: "0.75rem", minWidth: 0 }}
+                    >
+                        {isAdmin ? <Unlock size={14} /> : <Lock size={14} />}
+                    </LiquidButton>
+                </header>
+
+                {/* CREATE FORM */}
+                <div className="px-4 pb-2 relative z-10">
+                    <form onSubmit={createTournament} className="relative group">
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/15 to-orange-500/15 rounded-2xl blur opacity-0 group-focus-within:opacity-60 transition duration-500"></div>
+                        <div className="relative flex items-center gap-2 px-4 py-2 rounded-2xl overflow-hidden transition-all duration-300"
+                            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+
+                            <Plus size={14} className="text-white/20 flex-none" />
+                            <input
+                                type="text"
+                                value={newTourneyName}
+                                onChange={(e) => setNewTourneyName(e.target.value)}
+                                placeholder="NEW EVENT..."
+                                className="flex-1 bg-transparent text-sm font-bold text-white placeholder-white/15 outline-none uppercase tracking-wider"
+                                style={{ caretColor: "#FFCA28" }}
+                            />
+
+                            {newTourneyName.trim() && (
+                                <LiquidButton type="submit" variant="primary"
+                                    style={{ width: 36, height: 36, borderRadius: "0.75rem", padding: 0, flexShrink: 0 }}>
+                                    <Plus size={18} strokeWidth={3} />
+                                </LiquidButton>
+                            )}
+                        </div>
+                    </form>
                 </div>
 
-                <LiquidButton
-                    onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }}
-                    variant={isAdmin ? "primary" : "ghost"}
-                    style={{ width: 36, height: 36, padding: 0, borderRadius: "0.75rem", minWidth: 0 }}
-                >
-                    {isAdmin ? <Unlock size={14} /> : <Lock size={14} />}
-                </LiquidButton>
-            </header>
+                {/* TAB SWITCHER */}
+                <div className="px-4 pb-4 relative z-10">
+                    <LiquidTabBar
+                        tabs={[
+                            { id: "events", label: "Tour History" },
+                            { id: "rankings", label: "Rankings", icon: <TrendingUp size={12} /> },
+                        ]}
+                        activeTab={hubTab}
+                        onChange={(id) => { triggerHaptic(20); setHubTab(id); }}
+                        style={{ maxWidth: 320, margin: "0 auto" }}
+                    />
+                </div>
 
-            {/* CREATE FORM — compact single-line */}
-            <div className="px-4 pb-2 relative z-10">
-                <form onSubmit={createTournament} className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/15 to-orange-500/15 rounded-2xl blur opacity-0 group-focus-within:opacity-60 transition duration-500"></div>
-                    <div className="relative flex items-center gap-2 px-4 py-2 rounded-2xl overflow-hidden transition-all duration-300"
-                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(24px)" }}>
-
-                        <Plus size={14} className="text-white/20 flex-none" />
-                        <input
-                            type="text"
-                            value={newTourneyName}
-                            onChange={(e) => setNewTourneyName(e.target.value)}
-                            placeholder="NEW EVENT..."
-                            className="flex-1 bg-transparent text-sm font-bold text-white placeholder-white/15 outline-none uppercase tracking-wider"
-                            style={{ caretColor: "#FFCA28" }}
-                        />
-
-                        {newTourneyName.trim() && (
-                            <LiquidButton type="submit" variant="primary"
-                                style={{ width: 36, height: 36, borderRadius: "0.75rem", padding: 0, flexShrink: 0 }}>
-                                <Plus size={18} strokeWidth={3} />
-                            </LiquidButton>
-                        )}
-                    </div>
-                </form>
-            </div>
-
-            {/* TAB SWITCHER */}
-            <div className="px-4 pb-3 relative z-10">
-                <LiquidTabBar
-                    tabs={[
-                        { id: "events", label: "Tour History" },
-                        { id: "rankings", label: "Rankings", icon: <TrendingUp size={12} /> },
-                    ]}
-                    activeTab={hubTab}
-                    onChange={(id) => { triggerHaptic(20); setHubTab(id); }}
-                    style={{ maxWidth: 320, margin: "0 auto" }}
-                />
+                {/* Bottom gloss highlight */}
+                <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
             </div>
 
             {/* MAIN CONTENT */}
-            <main className="flex-1 overflow-y-auto px-3 pb-8 relative z-10" style={{ scrollbarWidth: "none" }}>
+            <main className="flex-1 overflow-y-auto px-3 pb-8 relative z-10 pt-[250px]" style={{ scrollbarWidth: "none" }}>
                 <AnimatePresence mode="wait">
                     {hubTab === "events" ? (
                         <motion.div
@@ -169,18 +178,20 @@ export default function TournamentHub({
                                     {sortedTournaments.length}
                                 </span>
                             </div>
-                            <AnimatePresence initial={false} mode="popLayout">
-                                {sortedTournaments.map((t) => (
-                                    <TournamentCardItem
-                                        key={t.id}
-                                        t={t}
-                                        isAdmin={isAdmin}
-                                        triggerHaptic={triggerHaptic}
-                                        setActiveTournamentId={setActiveTournamentId}
-                                        setDeleteModal={setDeleteModal}
-                                    />
-                                ))}
-                            </AnimatePresence>
+                            <div className="md:grid md:grid-cols-2 md:gap-4 md:items-start space-y-1.5 md:space-y-0">
+                                <AnimatePresence initial={false} mode="popLayout">
+                                    {sortedTournaments.map((t) => (
+                                        <TournamentCardItem
+                                            key={t.id}
+                                            t={t}
+                                            isAdmin={isAdmin}
+                                            triggerHaptic={triggerHaptic}
+                                            setActiveTournamentId={setActiveTournamentId}
+                                            setDeleteModal={setDeleteModal}
+                                        />
+                                    ))}
+                                </AnimatePresence>
+                            </div>
 
                             {sortedTournaments.length === 0 && (
                                 <div className="py-20 text-center">
