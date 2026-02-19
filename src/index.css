@@ -1,10 +1,85 @@
 @import 'tailwindcss';
 
+/* ─── RESET & ROOT ─────────────────────────────────── */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: #031123;
+  background-color: #030712;
   overscroll-behavior: none;
+}
+
+/* ─── GLOBAL TYPOGRAPHY ─────────────────────────────── */
+*,
+*::before,
+*::after {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-feature-settings: 'liga' 1, 'ss01' 1;
+  letter-spacing: -0.01em;
+}
+
+/* Mono spans (scores, stats) */
+.font-mono, [class*="tabular-nums"] {
+  font-family: 'DM Mono', 'Space Mono', monospace;
+  letter-spacing: -0.04em;
+}
+
+/* ─── LIQUID BUTTON – ambient glow animation ─────────── */
+@keyframes liquidShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulseRing {
+  0%   { transform: scale(1);   opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+.liquid-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Animated gradient on primary liquid buttons */
+.liquid-btn-primary {
+  background-size: 200% 200%;
+  background-image: linear-gradient(135deg, #FFCA28 0%, #F57C00 35%, #ff9d00 70%, #FFCA28 100%);
+  animation: liquidShift 3s ease infinite;
+}
+
+/* Ripple element injected by JS */
+.liquid-ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  animation: rippleOut 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+@keyframes rippleOut {
+  0%   { transform: scale(0);   opacity: 1; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+/* ─── SCROLLBAR HIDE ─────────────────────────────────── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; }
+
+/* ─── SELECTION ──────────────────────────────────────── */
+::selection {
+  background: rgba(255, 202, 40, 0.25);
+  color: white;
 }
