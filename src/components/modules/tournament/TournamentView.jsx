@@ -102,6 +102,9 @@ export default function TournamentView({
 }) {
     const { trigger: triggerHaptic } = useHaptic();
     const [activeTab, setActiveTab] = useState("matches");
+    const mainScrollRef = React.useRef(null);
+    const tabScrollRef = React.useRef({ matches: 0, standings: 0 });
+    const previousTabRef = React.useRef("matches");
 
     const isSetupMode = !data || data.status === "draft";
 
@@ -130,6 +133,26 @@ export default function TournamentView({
             setDismissCelebration(true);
         }
     }, [setDismissCelebration]);
+
+    // Keep independent scroll positions per mobile tab.
+    React.useEffect(() => {
+        const mainEl = mainScrollRef.current;
+        if (!mainEl) return;
+
+        const prevTab = previousTabRef.current;
+        if (prevTab === activeTab) return;
+
+        tabScrollRef.current[prevTab] = mainEl.scrollTop;
+        const nextTop = tabScrollRef.current[activeTab] ?? 0;
+
+        requestAnimationFrame(() => {
+            if (mainScrollRef.current) {
+                mainScrollRef.current.scrollTop = nextTop;
+            }
+        });
+
+        previousTabRef.current = activeTab;
+    }, [activeTab]);
 
 
 
@@ -246,7 +269,12 @@ export default function TournamentView({
             </header>
 
             {/* MAIN SCROLL */}
-            <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain relative z-10 pt-[72px]"
+            <main
+                ref={mainScrollRef}
+                onScroll={(event) => {
+                    tabScrollRef.current[activeTab] = event.currentTarget.scrollTop;
+                }}
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain relative z-10 pt-[72px]"
                 style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", scrollbarWidth: "none" }}>
                 <div className="p-5 pb-36">
                     {isSetupMode ? (

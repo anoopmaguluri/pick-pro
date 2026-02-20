@@ -26,26 +26,26 @@ export default function StandingsTable({
         <motion.div key="standings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
 
             {/* Command Center Panel */}
-            <div className="rounded-[2rem] overflow-hidden mb-6 relative group"
+            <div className="rounded-[2rem] overflow-y-auto overscroll-contain mb-6 relative group max-h-[58dvh] md:max-h-[calc(100dvh-220px)]"
                 style={{
                     background: "linear-gradient(180deg, rgba(3,7,18,0.7) 0%, rgba(0,0,0,0.9) 100%)",
                     border: "1px solid rgba(255,255,255,0.05)",
                     backdropFilter: "blur(24px)",
                     boxShadow: "0 24px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 30px rgba(255,255,255,0.02)",
+                    scrollbarWidth: "none",
                 }}>
-
-                {/* Top edge sci-fi glow */}
-                <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
 
                 {/* Scanner line effect (very subtle texture) */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[linear-gradient(transparent_50%,rgba(255,255,255,1)_50%)] bg-[length:100%_4px]" />
 
                 {/* Header */}
-                <div className="px-5 py-4 flex items-center justify-between relative z-10"
+                <div className="px-5 py-4 flex items-center justify-between sticky top-0 z-20 relative overflow-hidden"
                     style={{
                         borderBottom: "1px solid rgba(255,255,255,0.05)",
-                        background: "linear-gradient(90deg, rgba(255,202,40,0.08) 0%, transparent 100%)",
+                        background: "linear-gradient(90deg, rgba(255,202,40,0.12) 0%, rgba(12,18,30,0.95) 60%, rgba(12,18,30,0.95) 100%)",
+                        backdropFilter: "blur(10px)",
                     }}>
+                    <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
                     <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest leading-none"
                         style={{ color: "rgba(255,202,40,0.8)" }}>
                         {isTournamentOver ? (
