@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2100" height="1320" viewBox="0 0 2100 1320" role="img" aria-labelledby="title desc">
+  <title id="title">Pick-Pro Engineering Architecture</title>
+  <desc id="desc">Detailed engineering architecture including modules, data nodes, worker boundaries, and event pipeline.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <marker id="arrowB" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrowG" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4ade80"/>
+    </marker>
+    <marker id="arrowY" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#facc15"/>
+    </marker>
+    <style>
+      .title { font: 700 34px Inter, Segoe UI, Roboto, Arial, sans-serif; fill: #f8fafc; }
+      .subtitle { font: 500 15px Inter, Segoe UI, Roboto, Arial, sans-serif; fill: #cbd5e1; }
+      .lane { font: 700 20px Inter, Segoe UI, Roboto, Arial, sans-serif; fill: #e2e8f0; }
+      .h { font: 700 15px Inter, Segoe UI, Roboto, Arial, sans-serif; fill: #f8fafc; }
+      .b { font: 500 13px Inter, Segoe UI, Roboto, Arial, sans-serif; fill: #cbd5e1; }
+      .s { font: 500 12px Inter, Segoe UI, Roboto, Arial, sans-serif; fill: #94a3b8; }
+      .lineB { stroke: #60a5fa; stroke-width: 2.1; fill: none; marker-end: url(#arrowB); }
+      .lineG { stroke: #4ade80; stroke-width: 2.1; fill: none; marker-end: url(#arrowG); }
+      .lineY { stroke: #facc15; stroke-width: 2.1; fill: none; marker-end: url(#arrowY); }
+      .dash { stroke-dasharray: 7 6; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="2100" height="1320" fill="url(#bg)"/>
+
+  <text x="34" y="50" class="title">Pick-Pro Engineering Architecture (Detailed)</text>
+  <text x="34" y="76" class="subtitle">Code-level view of module boundaries, Firebase nodes, event sourcing, worker compute, and reliability mechanisms</text>
+
+  <!-- Lanes -->
+  <rect x="24" y="100" width="2052" height="1188" rx="16" fill="#0b1323" stroke="#334155"/>
+
+  <rect x="40" y="118" width="990" height="1148" rx="12" fill="#0f172a" stroke="#334155"/>
+  <text x="58" y="148" class="lane">Client Runtime Lane</text>
+
+  <rect x="1046" y="118" width="500" height="1148" rx="12" fill="#0f172a" stroke="#334155"/>
+  <text x="1064" y="148" class="lane">Firebase Services Lane</text>
+
+  <rect x="1562" y="118" width="500" height="1148" rx="12" fill="#0f172a" stroke="#334155"/>
+  <text x="1580" y="148" class="lane">Realtime Database Nodes Lane</text>
+
+  <!-- Client: UI and app -->
+  <rect x="58" y="174" width="954" height="130" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="78" y="202" class="h">UI Layer</text>
+  <text x="78" y="224" class="b">`src/App.jsx`, `TournamentHub`, `TournamentView`, `MatchList`, `StandingsTable`</text>
+  <text x="78" y="246" class="b">Admin actions: create/delete tournaments, setup formats, score taps, finalize matches</text>
+  <text x="78" y="268" class="s">Presentation stays stable while data strategy changed to lightweight projections</text>
+
+  <rect x="58" y="320" width="462" height="220" rx="10" fill="#1f2937" stroke="#475569"/>
+  <text x="78" y="348" class="h">Hook: `useTournaments`</text>
+  <text x="78" y="370" class="b">Subscribes:</text>
+  <text x="98" y="390" class="s">- `tournaments_meta`</text>
+  <text x="98" y="410" class="s">- `leaderboard_global`</text>
+  <text x="98" y="430" class="s">- `roster`</text>
+  <text x="78" y="454" class="b">Bootstrap:</text>
+  <text x="98" y="474" class="s">- if schema mismatch or empty leaderboard -> rebuild aggregate</text>
+  <text x="98" y="494" class="s">- backfill `playersPreview`/`playerCount` into meta</text>
+
+  <rect x="550" y="320" width="462" height="220" rx="10" fill="#1f2937" stroke="#475569"/>
+  <text x="570" y="348" class="h">Hook: `useActiveTournament`</text>
+  <text x="570" y="370" class="b">Reads path-scoped active tournament branches</text>
+  <text x="590" y="390" class="s">`events`, `scoreSnapshot`, `matches`, `knockouts`,</text>
+  <text x="590" y="410" class="s">`draftPlayers`, `players`, `teams`, `format`, `status`, `winner`</text>
+  <text x="570" y="434" class="b">Reducer:</text>
+  <text x="590" y="454" class="s">`applyEventSourcing(raw)` => base + snapshot + event replay</text>
+
+  <rect x="58" y="560" width="954" height="268" rx="10" fill="#1f2937" stroke="#475569"/>
+  <text x="78" y="588" class="h">Hook: `useScoring` (write pipeline)</text>
+  <text x="78" y="610" class="b">1) Optimistic local score map + haptics</text>
+  <text x="78" y="632" class="b">2) Build score event payload: `{ type:'SCORE', mIdx, team, delta, nextScore, ts, sourceId, clientEventId }`</text>
+  <text x="78" y="654" class="b">3) Persist to LocalForage queue (`pending-score-events-v1`) before network push</text>
+  <text x="78" y="676" class="b">4) Push event to RTDB `tournament_data/{id}/events`</text>
+  <text x="78" y="698" class="b">5) On confirmMatch / confirmKnockout:</text>
+  <text x="98" y="718" class="s">- mark done in RTDB</text>
+  <text x="98" y="738" class="s">- apply leaderboard deltas through idempotency guard `leaderboard_applied/{id}/{scope}/{idx}`</text>
+  <text x="98" y="758" class="s">- compact events to `scoreSnapshot` when threshold reached</text>
+  <text x="78" y="782" class="s">Online listener retries queued events when connectivity returns</text>
+
+  <rect x="58" y="846" width="954" height="178" rx="10" fill="#1f2937" stroke="#475569"/>
+  <text x="78" y="874" class="h">Workers + Compute</text>
+  <text x="78" y="896" class="b">`tournamentBuilder.worker.js` <- setup auto-generation request (`PREPARE_TOURNAMENT`)</text>
+  <text x="78" y="918" class="b">`standings.worker.js` <- standings/tie-break compute (`calculateStandings`)</text>
+  <text x="78" y="940" class="b">Main thread fallback to `calculateStandings` on worker error</text>
+  <text x="78" y="962" class="s">Prevents UI freeze for heavy generation and sorting calculations</text>
+
+  <rect x="58" y="1040" width="954" height="210" rx="10" fill="#1f2937" stroke="#475569"/>
+  <text x="78" y="1068" class="h">Platform Helpers</text>
+  <text x="78" y="1090" class="b">`src/services/firebase.js`</text>
+  <text x="98" y="1110" class="s">- `initializeApp`</text>
+  <text x="98" y="1130" class="s">- RTDB instance</text>
+  <text x="98" y="1150" class="s">- Auth instance + `ensureFirebaseSession()` via anonymous sign-in</text>
+  <text x="78" y="1174" class="b">`src/main.jsx`</text>
+  <text x="98" y="1194" class="s">- `registerSW({ immediate: true })` from `vite-plugin-pwa`</text>
+  <text x="98" y="1214" class="s">- app mount in StrictMode</text>
+
+  <!-- Firebase services lane -->
+  <rect x="1064" y="174" width="464" height="154" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1084" y="202" class="h">Firebase Auth</text>
+  <text x="1084" y="224" class="b">Anonymous auth enabled in project</text>
+  <text x="1084" y="246" class="b">Client obtains token before write flows</text>
+  <text x="1084" y="268" class="s">Rules expect `auth != null` on mutation paths</text>
+
+  <rect x="1064" y="346" width="464" height="364" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1084" y="374" class="h">Realtime Database Rules + Access Pattern</text>
+  <text x="1084" y="396" class="b">Rules file: `firebase/database.rules.json`</text>
+  <text x="1084" y="418" class="s">- root deny by default</text>
+  <text x="1084" y="438" class="s">- scoped reads for app nodes</text>
+  <text x="1084" y="458" class="s">- write auth guard (`auth != null`)</text>
+  <text x="1084" y="478" class="s">- event shape validation</text>
+  <text x="1084" y="498" class="s">- indexes: meta fields, event ts/clientEventId, leaderboard fields</text>
+  <text x="1084" y="522" class="b">Operational effect</text>
+  <text x="1084" y="542" class="s">- no broad root `tournament_data` read</text>
+  <text x="1084" y="562" class="s">- active tournament reads only needed branches</text>
+  <text x="1084" y="582" class="s">- leaderboard read from aggregate node</text>
+
+  <rect x="1064" y="728" width="464" height="248" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1084" y="756" class="h">PWA Runtime</text>
+  <text x="1084" y="778" class="b">Service worker generated by Workbox via Vite plugin</text>
+  <text x="1084" y="800" class="s">- precache app shell</text>
+  <text x="1084" y="820" class="s">- runtime caching for selected assets</text>
+  <text x="1084" y="844" class="b">Offline write behavior</text>
+  <text x="1084" y="864" class="s">- browser cache for static assets</text>
+  <text x="1084" y="884" class="s">- LocalForage queue for pending score events</text>
+  <text x="1084" y="904" class="s">- retry on reconnect</text>
+
+  <rect x="1064" y="994" width="464" height="256" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1084" y="1022" class="h">Deployment Control Plane</text>
+  <text x="1084" y="1044" class="b">`firebase.json` -> points DB deploy to rules file</text>
+  <text x="1084" y="1066" class="b">Deploy cmd:</text>
+  <text x="1104" y="1086" class="s">`firebase deploy --only database`</text>
+  <text x="1084" y="1110" class="b">Build/test status in repo</text>
+  <text x="1104" y="1130" class="s">Vitest suite covering event sourcing, scheduling, leaderboard utils</text>
+
+  <!-- DB lane -->
+  <rect x="1580" y="174" width="464" height="146" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1600" y="202" class="h">`tournaments_meta/{id}`</text>
+  <text x="1600" y="224" class="b">id, name, createdAt, status, format, winner</text>
+  <text x="1600" y="246" class="b">`playersPreview[]`, `playerCount`, draft roster metadata</text>
+
+  <rect x="1580" y="338" width="464" height="226" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1600" y="366" class="h">`tournament_data/{id}`</text>
+  <text x="1600" y="388" class="b">matches[], knockouts[], teams[], players[], draftPlayers[]</text>
+  <text x="1600" y="410" class="b">status, format, winner</text>
+  <text x="1600" y="432" class="b">events/* (SCORE stream with clientEventId)</text>
+  <text x="1600" y="454" class="b">scoreSnapshot (compaction baseline)</text>
+  <text x="1600" y="476" class="s">Replayed client-side by `applyEventSourcing`</text>
+
+  <rect x="1580" y="582" width="464" height="170" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1600" y="610" class="h">`leaderboard_global/{playerKey}`</text>
+  <text x="1600" y="632" class="b">name, p, w, l, pd, pf, pa</text>
+  <text x="1600" y="654" class="b">Read by rankings tab; client computes winRate/rating</text>
+  <text x="1600" y="676" class="s">Updated incrementally from confirmed match outcomes</text>
+
+  <rect x="1580" y="770" width="464" height="146" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1600" y="798" class="h">`leaderboard_applied/{id}/{scope}/{idx}`</text>
+  <text x="1600" y="820" class="b">Boolean markers for idempotency</text>
+  <text x="1600" y="842" class="b">Prevents double-counting aggregate deltas</text>
+
+  <rect x="1580" y="934" width="464" height="146" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1600" y="962" class="h">`leaderboard_meta` and `roster`</text>
+  <text x="1600" y="984" class="b">schemaVersion/rebuiltAt + global player roster list</text>
+  <text x="1600" y="1006" class="s">Bootstrap guard and player directory</text>
+
+  <rect x="1580" y="1098" width="464" height="152" rx="10" fill="#1e293b" stroke="#475569"/>
+  <text x="1600" y="1126" class="h">Deletion / rollback behavior</text>
+  <text x="1600" y="1148" class="b">Tournament removal also clears marker subtree</text>
+  <text x="1600" y="1170" class="b">Leaderboard deltas are subtracted from aggregates</text>
+
+  <!-- Major flow connectors -->
+  <path d="M520 390 C 760 390, 760 210, 1064 210" class="lineB"/>
+  <text x="740" y="380" class="s">session bootstrap</text>
+
+  <path d="M520 400 C 800 400, 800 250, 1580 250" class="lineB"/>
+  <text x="820" y="388" class="s">meta subscriptions</text>
+
+  <path d="M780 444 C 970 444, 970 444, 1580 444" class="lineB"/>
+  <text x="980" y="432" class="s">active tournament branch reads</text>
+
+  <path d="M970 666 C 1220 666, 1220 450, 1580 450" class="lineG"/>
+  <text x="1232" y="640" class="s">score event writes</text>
+
+  <path d="M980 742 C 1230 742, 1230 650, 1580 650" class="lineG"/>
+  <text x="1240" y="724" class="s">leaderboard increment updates</text>
+
+  <path d="M500 460 C 760 460, 760 610, 1580 610" class="lineY dash"/>
+  <text x="770" y="530" class="s">bootstrap aggregate rebuild (if needed)</text>
+
+  <path d="M950 940 C 1240 940, 1240 820, 1580 820" class="lineG"/>
+  <text x="1248" y="900" class="s">idempotency marker transaction</text>
+
+  <path d="M960 780 C 1200 780, 1200 520, 1580 520" class="lineY dash"/>
+  <text x="1212" y="760" class="s">event compaction to snapshot</text>
+
+  <!-- legend -->
+  <rect x="40" y="1268" width="2022" height="36" rx="8" fill="#111827" stroke="#334155"/>
+  <line x1="62" y1="1286" x2="108" y2="1286" class="lineB"/>
+  <text x="116" y="1291" class="s">Read/subscription flow</text>
+  <line x1="320" y1="1286" x2="366" y2="1286" class="lineG"/>
+  <text x="374" y="1291" class="s">Write/mutation flow</text>
+  <line x1="560" y1="1286" x2="606" y2="1286" class="lineY dash"/>
+  <text x="614" y="1291" class="s">Derived/maintenance flow</text>
+</svg>

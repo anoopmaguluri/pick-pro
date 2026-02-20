@@ -1,13 +1,33 @@
 // ─── Match Processing ─────────────────────────────────────────────────────────
 
 export const processMatches = (matchesArray, stats) => {
+    const resolveParticipants = (team) => {
+        if (!team) return { p1: null, p2: null };
+
+        if (team.p1 || team.p2) {
+            return { p1: team.p1 || null, p2: team.p2 || null };
+        }
+
+        // Legacy/partial data may only have `name`.
+        // Support doubles strings like "A/B" as two participants.
+        const rawName = typeof team.name === "string" ? team.name.trim() : "";
+        if (!rawName) return { p1: null, p2: null };
+
+        const parts = rawName.split("/").map((p) => p.trim()).filter(Boolean);
+        if (parts.length >= 2) return { p1: parts[0], p2: parts[1] };
+
+        return { p1: rawName, p2: null };
+    };
+
     if (!matchesArray) return;
     matchesArray.forEach((m) => {
         if (m.done) {
-            const p1 = m.tA.p1;
-            const p2 = m.tA.p2;
-            const p3 = m.tB.p1;
-            const p4 = m.tB.p2;
+            const aParticipants = resolveParticipants(m.tA);
+            const bParticipants = resolveParticipants(m.tB);
+            const p1 = aParticipants.p1;
+            const p2 = aParticipants.p2;
+            const p3 = bParticipants.p1;
+            const p4 = bParticipants.p2;
             const aWon = m.sA > m.sB;
             const pdA = m.sA - m.sB;
             const pdB = m.sB - m.sA;
@@ -55,20 +75,168 @@ export const buildPairedTeams = (shuffledPlayers) => {
  * True round-robin: every team plays every other team exactly once.
  * Used for fixed teams (even + doubles).
  */
-export const buildRoundRobin = (teams) => {
+export const buildRoundRobin = (teams, maxGamesPerTeam = null) => {
+    // Default mode: full round-robin (existing behavior)
+    if (!Number.isFinite(maxGamesPerTeam) || maxGamesPerTeam <= 0) {
+        const matches = [];
+        for (let i = 0; i < teams.length; i++) {
+            for (let j = i + 1; j < teams.length; j++) {
+                matches.push({
+                    id: `m_${i}_${j}`,
+                    tA: teams[i],
+                    tB: teams[j],
+                    sA: 0,
+                    sB: 0,
+                });
+            }
+        }
+        return matches;
+    }
+
+    // Capped mode: use round-robin rounds and keep only first N rounds.
+    // This preserves "no repeated opponents" while capping games/team.
     const matches = [];
-    for (let i = 0; i < teams.length; i++) {
-        for (let j = i + 1; j < teams.length; j++) {
+    if (teams.length < 2) return matches;
+
+    const participants = [...teams];
+    if (participants.length % 2 === 1) {
+        participants.push(null); // bye slot for odd team counts
+    }
+
+    const rounds = participants.length - 1;
+    const maxRounds = Math.min(rounds, Math.floor(maxGamesPerTeam));
+    const slotCount = participants.length;
+
+    for (let r = 0; r < maxRounds; r++) {
+        for (let i = 0; i < slotCount / 2; i++) {
+            const tA = participants[i];
+            const tB = participants[slotCount - 1 - i];
+            if (!tA || !tB) continue;
             matches.push({
-                id: `m_${i}_${j}`,
-                tA: teams[i],
-                tB: teams[j],
+                id: `m_${matches.length}`,
+                tA,
+                tB,
                 sA: 0,
                 sB: 0,
             });
         }
+
+        // Circle-method rotation: fix first slot, rotate the rest.
+        const fixed = participants[0];
+        const rotating = participants.slice(1);
+        const last = rotating.pop();
+        rotating.unshift(last);
+        participants.splice(0, participants.length, fixed, ...rotating);
     }
+
     return matches;
+};
+
+export const getGradient = (name) => {
+    if (!name || name.trim() === '') return "linear-gradient(135deg, #1f2937, #111827)";
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c1 = `hsl(${Math.abs(hash) % 360}, 70%, 40%)`;
+    const c2 = `hsl(${(Math.abs(hash) + 40) % 360}, 80%, 30%)`;
+    return `linear-gradient(135deg, ${c1}, ${c2})`;
+};
+
+// ─── EVENT SOURCING REDUCER ──────────────────────────────────────────────────
+export const applyEventSourcing = (rawTournamentData) => {
+    if (!rawTournamentData) return null;
+
+    // Clone the base structure
+    const mergedData = { ...rawTournamentData };
+    const normalizeList = (value) => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value.filter(Boolean);
+        if (typeof value === "object") return Object.values(value).filter(Boolean);
+        return [];
+    };
+
+    // Deep clone matches and knockouts to apply events safely
+    mergedData.matches = normalizeList(mergedData.matches).map(m => ({ ...m, sA: m.sA || 0, sB: m.sB || 0 }));
+    mergedData.knockouts = normalizeList(mergedData.knockouts).map(k => ({ ...k, sA: k.sA || 0, sB: k.sB || 0 }));
+
+    // Optional score snapshot allows log compaction while preserving current scoreboard state.
+    const snapshot = mergedData.scoreSnapshot;
+    if (snapshot && typeof snapshot === "object") {
+        if (Array.isArray(mergedData.matches) && Array.isArray(snapshot.matches)) {
+            mergedData.matches.forEach((m, idx) => {
+                const snap = snapshot.matches[idx];
+                if (!snap) return;
+                m.sA = Number.isFinite(snap.sA) ? Math.max(0, Math.trunc(snap.sA)) : (m.sA || 0);
+                m.sB = Number.isFinite(snap.sB) ? Math.max(0, Math.trunc(snap.sB)) : (m.sB || 0);
+            });
+        }
+
+        if (Array.isArray(mergedData.knockouts) && Array.isArray(snapshot.knockouts)) {
+            mergedData.knockouts.forEach((m, idx) => {
+                const snap = snapshot.knockouts[idx];
+                if (!snap) return;
+                m.sA = Number.isFinite(snap.sA) ? Math.max(0, Math.trunc(snap.sA)) : (m.sA || 0);
+                m.sB = Number.isFinite(snap.sB) ? Math.max(0, Math.trunc(snap.sB)) : (m.sB || 0);
+            });
+        }
+    }
+
+    // Apply Event Sourcing stream
+    let events = normalizeList(mergedData.events);
+
+    if (events && Array.isArray(events)) {
+        // Sort events chronologically
+        const sortedEvents = [...events].sort((a, b) => a.ts - b.ts);
+        const crossAdminWindowMs = 650;
+        const lastAcceptedByAction = {}; // action -> { ts, sourceId }
+        const seenClientEventIds = new Set();
+
+        sortedEvents.forEach(evt => {
+            if (evt.type === "SCORE") {
+                const clientEventId = typeof evt.clientEventId === "string" ? evt.clientEventId.trim() : "";
+                if (clientEventId) {
+                    if (seenClientEventIds.has(clientEventId)) {
+                        return;
+                    }
+                    seenClientEventIds.add(clientEventId);
+                }
+
+                const targetArray = evt.isKnockout ? mergedData.knockouts : mergedData.matches;
+                if (targetArray && targetArray[evt.mIdx]) {
+                    const scoreField = evt.team === "A" ? "sA" : "sB";
+
+                    const actionKey = `${evt.isKnockout ? "k" : "m"}-${evt.mIdx}-${evt.team}-${evt.delta}`;
+                    const sourceId = typeof evt.sourceId === "string" && evt.sourceId.trim() ? evt.sourceId.trim() : null;
+                    const prevAccepted = lastAcceptedByAction[actionKey];
+
+                    // Ignore likely duplicate taps only when they come from different admins/devices
+                    // in a very short window. Same-admin rapid taps are treated as intentional.
+                    if (
+                        prevAccepted &&
+                        sourceId &&
+                        prevAccepted.sourceId &&
+                        prevAccepted.sourceId !== sourceId &&
+                        (evt.ts - prevAccepted.ts) < crossAdminWindowMs
+                    ) {
+                        return;
+                    }
+
+                    lastAcceptedByAction[actionKey] = { ts: evt.ts, sourceId };
+
+                    const hasAbsoluteScore = Number.isFinite(evt.nextScore);
+                    if (hasAbsoluteScore) {
+                        targetArray[evt.mIdx][scoreField] = Math.max(0, Math.trunc(evt.nextScore));
+                    } else {
+                        const current = targetArray[evt.mIdx][scoreField] || 0;
+                        targetArray[evt.mIdx][scoreField] = Math.max(0, current + evt.delta);
+                    }
+                }
+            }
+        });
+    }
+
+    return mergedData;
 };
 
 // ─── Singles Round-Robin ──────────────────────────────────────────────────────
@@ -79,53 +247,16 @@ export const buildRoundRobin = (teams) => {
  */
 export const buildSinglesRoundRobin = (players) => {
     const matches = [];
-    const gamesPlayed = {};
-    players.forEach(p => gamesPlayed[p] = 0);
-    const played = new Set(); // "A-B"
-
-    const MAX_GAMES = 3;
-    let safety = 0;
-
-    // Prioritize players with fewer games
-    while (safety < 200) {
-        safety++;
-
-        // Candidates needing games
-        let candidates = players.filter(p => gamesPlayed[p] < MAX_GAMES);
-
-        // Need at least 2 to form a match
-        if (candidates.length < 2) break;
-
-        // Shuffle to randomize
-        candidates.sort(() => Math.random() - 0.5);
-
-        // Find a valid pair
-        let found = false;
-        for (let i = 0; i < candidates.length; i++) {
-            const p1 = candidates[i];
-            for (let j = i + 1; j < candidates.length; j++) {
-                const p2 = candidates[j];
-                const key = [p1, p2].sort().join("-");
-
-                if (!played.has(key)) {
-                    // Match found
-                    matches.push({
-                        id: `s_${matches.length}`,
-                        tA: { name: p1, p1: p1, p2: null },
-                        tB: { name: p2, p1: p2, p2: null },
-                        sA: 0, sB: 0,
-                    });
-                    gamesPlayed[p1]++;
-                    gamesPlayed[p2]++;
-                    played.add(key);
-                    found = true;
-                    break;
-                }
-            }
-            if (found) break;
+    for (let i = 0; i < players.length; i++) {
+        for (let j = i + 1; j < players.length; j++) {
+            matches.push({
+                id: `s_${matches.length}`,
+                tA: { name: players[i], p1: players[i], p2: null },
+                tB: { name: players[j], p1: players[j], p2: null },
+                sA: 0,
+                sB: 0,
+            });
         }
-
-        if (!found) break; // No valid matches left
     }
 
     return matches;
@@ -147,10 +278,70 @@ export const buildMixerDoubles = (players) => {
     players.forEach(p => gamesPlayed[p] = 0);
 
     const usedPartners = new Set(); // "A+B"
-    const usedOpponents = new Set(); // "A vs B" (individual matchups tracked to diversify)
+    const usedOpponentPairs = new Set(); // "A|B" for individual opponent pairings
+    const usedTeamMatchups = new Set(); // "Team1 vs Team2"
+    const usedQuartets = new Set(); // "A+B+C+D" (same 4-player group)
 
     const MAX_GAMES = 3;
     let safety = 0;
+
+    const partnerKey = (a, b) => [a, b].sort().join("+");
+    const opponentKey = (a, b) => [a, b].sort().join("|");
+    const matchupKey = (aKey, bKey) => [aKey, bKey].sort().join(" vs ");
+    const quartetKey = (arr) => [...arr].sort().join("+");
+
+    const evaluateGroup = (group) => {
+        const qKey = quartetKey(group);
+        if (usedQuartets.has(qKey)) return null;
+
+        const perms = [
+            [[group[0], group[1]], [group[2], group[3]]],
+            [[group[0], group[2]], [group[1], group[3]]],
+            [[group[0], group[3]], [group[1], group[2]]],
+        ];
+
+        for (const perm of perms) {
+            const tA = perm[0];
+            const tB = perm[1];
+            const keyA = partnerKey(tA[0], tA[1]);
+            const keyB = partnerKey(tB[0], tB[1]);
+
+            // Never repeat teammate pair in mixer.
+            if (usedPartners.has(keyA) || usedPartners.has(keyB)) continue;
+
+            const mKey = matchupKey(keyA, keyB);
+            if (usedTeamMatchups.has(mKey)) continue;
+
+            const oppKeys = [
+                opponentKey(tA[0], tB[0]),
+                opponentKey(tA[0], tB[1]),
+                opponentKey(tA[1], tB[0]),
+                opponentKey(tA[1], tB[1]),
+            ];
+
+            // Never repeat opponent pairings.
+            if (oppKeys.some((k) => usedOpponentPairs.has(k))) continue;
+
+            return { tA, tB, keyA, keyB, oppKeys, mKey, qKey };
+        }
+
+        return null;
+    };
+
+    const findValidSelection = (candidatePool) => {
+        for (let a = 0; a < candidatePool.length; a++) {
+            for (let b = a + 1; b < candidatePool.length; b++) {
+                for (let c = b + 1; c < candidatePool.length; c++) {
+                    for (let d = c + 1; d < candidatePool.length; d++) {
+                        const group = [candidatePool[a], candidatePool[b], candidatePool[c], candidatePool[d]];
+                        const selected = evaluateGroup(group);
+                        if (selected) return selected;
+                    }
+                }
+            }
+        }
+        return null;
+    };
 
     while (safety < 200) {
         safety++;
@@ -163,38 +354,15 @@ export const buildMixerDoubles = (players) => {
 
         if (candidates.length < 4) break;
 
-        // Try to form a match with top candidates
-        // We pick top 4, or shuffle top N? 
-        // Let's pick strict top 4 to enforce balancing, but shuffle them to find pairing
-        const pool = candidates.slice(0, 4);
+        const focusedPool = candidates.slice(0, Math.min(candidates.length, 8));
+        let selected = findValidSelection(focusedPool);
+        if (!selected && candidates.length > focusedPool.length) {
+            selected = findValidSelection(candidates);
+        }
+        if (!selected) break;
 
-        // Try permutations of these 4
-        // p0,p1 vs p2,p3
-        // p0,p2 vs p1,p3
-        // p0,p3 vs p1,p2
-        const perms = [
-            [[pool[0], pool[1]], [pool[2], pool[3]]],
-            [[pool[0], pool[2]], [pool[1], pool[3]]],
-            [[pool[0], pool[3]], [pool[1], pool[2]]]
-        ];
-
-        // Score permutations: lower is better (0 repeated partners)
-        const scored = perms.map(perm => {
-            const tA = perm[0].sort();
-            const tB = perm[1].sort();
-            const keyA = tA.join("+");
-            const keyB = tB.join("+");
-            let score = 0;
-            if (usedPartners.has(keyA)) score += 10;
-            if (usedPartners.has(keyB)) score += 10;
-            return { perm, score, keyA, keyB };
-        }).sort((a, b) => a.score - b.score);
-
-        const best = scored[0];
-
-        // Commit
-        const tA = best.perm[0];
-        const tB = best.perm[1];
+        const tA = selected.tA;
+        const tB = selected.tB;
 
         matches.push({
             id: `mx_${matches.length}`,
@@ -203,11 +371,16 @@ export const buildMixerDoubles = (players) => {
             sA: 0, sB: 0,
         });
 
-        usedPartners.add(best.keyA);
-        usedPartners.add(best.keyB);
+        usedPartners.add(selected.keyA);
+        usedPartners.add(selected.keyB);
+        usedTeamMatchups.add(selected.mKey);
+        selected.oppKeys.forEach((k) => usedOpponentPairs.add(k));
+        usedQuartets.add(selected.qKey);
 
         // Mark players
-        pool.forEach(p => gamesPlayed[p]++);
+        [tA[0], tA[1], tB[0], tB[1]].forEach((p) => {
+            gamesPlayed[p]++;
+        });
     }
 
     return matches;
@@ -299,7 +472,10 @@ export const determineStatus = (sorted, qCount, totalMatchesEach, allMatchesFini
     const totalPerEntry = totalMatchesEach ?? (n - 1);
 
     sorted.forEach((t) => {
-        t.rem = Math.max(0, totalPerEntry - (t.p || 0));
+        const perEntryScheduled = Number.isFinite(t?.scheduled)
+            ? Number(t.scheduled)
+            : totalPerEntry;
+        t.rem = Math.max(0, perEntryScheduled - (t.p || 0));
         t.maxWins = (t.w || 0) + t.rem;
     });
 
@@ -486,4 +662,3 @@ export const intelligentSort = (standingsArray, matches = []) => {
         return a.name.localeCompare(b.name);
     });
 };
-

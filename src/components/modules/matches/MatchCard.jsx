@@ -296,7 +296,7 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                         ? { background: "linear-gradient(135deg, #FFCA28, #F57C00)", color: "#030712" }
                         : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)", borderTop: "none" }
                     }>
-                    {match.type}
+                    {match.type || (match.id === "final" ? "🏆 GRAND FINAL" : "")}
                 </div>
             )}
 

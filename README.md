@@ -1,16 +1,79 @@
-# React + Vite
+# Pick-Pro
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Pick-Pro is a React + Vite tournament app for live scoring, standings, and global rankings.
 
-Currently, two official plugins are available:
+## Requirements
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js `20.19+` or `22.12+`
+- npm (or Yarn 4, since `packageManager` is configured for Yarn)
 
-## React Compiler
+## Environment Setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The app needs Firebase env vars (used in `src/services/firebase.js`):
 
-## Expanding the ESLint configuration
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_DB_URL`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_MEASUREMENT_ID`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Create a local env file (example):
+
+```bash
+cp .env.development .env.local
+```
+
+Then edit `.env.local` as needed for your Firebase project.
+
+## Install
+
+```bash
+npm install
+```
+
+## Run in Development
+
+```bash
+npm run dev
+```
+
+The app starts with Vite on host mode (`vite --host`).
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+Build output is generated in:
+
+```bash
+dist/
+```
+
+## Preview Production Build
+
+```bash
+npm run preview
+```
+
+## Tests and Lint
+
+```bash
+npm run test:ci
+npm run lint
+```
+
+## Firebase Notes
+
+- Realtime Database rules are in `firebase/database.rules.json`.
+- Deploy rules with:
+
+```bash
+firebase deploy --only database
+```
+
+- Anonymous auth must be enabled in Firebase Auth for write operations.

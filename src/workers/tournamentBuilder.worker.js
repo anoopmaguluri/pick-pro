@@ -3,16 +3,22 @@ import {
     buildPairedTeams,
     buildRoundRobin,
     buildMixerDoubles
-} from "./gameLogic";
+} from "../utils/gameLogic";
 
-/**
- * Prepares the tournament data as a pure function.
- * 
- * @param {string} fmt - The tournament format ("singles" or "doubles")
- * @param {string[]} draftPlayers - List of players currently in the draft
- * @returns {Object} { format, teams, matches, players }
- */
-export const prepareAutoTournamentResult = (fmt, draftPlayers) => {
+self.onmessage = function (e) {
+    const { action, fmt, draftPlayers } = e.data;
+
+    if (action === "PREPARE_TOURNAMENT") {
+        try {
+            const result = prepareAutoTournamentResultWorker(fmt, draftPlayers);
+            self.postMessage({ status: 'success', data: result });
+        } catch (error) {
+            self.postMessage({ status: 'error', error: error.message });
+        }
+    }
+};
+
+const prepareAutoTournamentResultWorker = (fmt, draftPlayers) => {
     const players = [...draftPlayers];
 
     // Fisher-Yates shuffle
@@ -27,7 +33,6 @@ export const prepareAutoTournamentResult = (fmt, draftPlayers) => {
     let format, teams, matches, knockouts = [];
 
     if (!isDouble) {
-        // SINGLES — individual 1v1 round-robin
         format = "singles";
         teams = null;
         if (players.length === 2) {
@@ -43,7 +48,6 @@ export const prepareAutoTournamentResult = (fmt, draftPlayers) => {
             matches = buildSinglesRoundRobin(players);
         }
     } else if (isEven) {
-        // EVEN + DOUBLES — fixed teams, team round-robin, team standings
         format = "pairs";
         teams = buildPairedTeams(players);
         if (teams.length === 2) {
@@ -60,7 +64,6 @@ export const prepareAutoTournamentResult = (fmt, draftPlayers) => {
             matches = buildRoundRobin(teams, maxGamesPerTeam);
         }
     } else {
-        // ODD + DOUBLES — mixer: unique teams, individual standings
         format = "mixer";
         teams = null;
         matches = buildMixerDoubles(players);

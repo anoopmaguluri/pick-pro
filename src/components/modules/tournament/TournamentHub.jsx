@@ -18,12 +18,12 @@ import {
 import { useHaptic } from "../../../hooks/useHaptic";
 import PlayerAvatar from "../../common/PlayerAvatar";
 import Modal from "../../common/Modal";
+import GlassModal from "../../common/GlassModal";
 import LiquidButton from "../../common/LiquidButton";
 import LiquidTabBar from "../../common/LiquidTabBar";
 
 export default function TournamentHub({
     tournaments,
-    activeTournamentId,
     setActiveTournamentId,
     createTournament,
     deleteTournament,
@@ -178,6 +178,7 @@ export default function TournamentHub({
                                     {sortedTournaments.length}
                                 </span>
                             </div>
+
                             <div className="md:grid md:grid-cols-2 md:gap-4 md:items-start space-y-1.5 md:space-y-0">
                                 <AnimatePresence initial={false} mode="popLayout">
                                     {sortedTournaments.map((t) => (
@@ -429,7 +430,9 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
     const snapBack = () => animate(x, 0, { type: "spring", stiffness: 450, damping: 38 });
     const snapOff = () => animate(x, -420, { type: "spring", stiffness: 500, damping: 45, mass: 0.8 });
 
-    const players = t.players || t.draftPlayers || [];
+    const playersPreview = Array.isArray(t.playersPreview) ? t.playersPreview : [];
+    const playerCount = Number.isFinite(t.playerCount) ? Number(t.playerCount) : playersPreview.length;
+
     const isWinner = !!t.winner;
     const isActive = t.status === "active";
     const isDraft = t.status === "draft";
@@ -664,18 +667,18 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                         {/* ─ Player avatars ─ */}
                         <div className="flex-none flex items-center z-10">
                             <div className="flex -space-x-2">
-                                {players.slice(0, 4).map((p, i) => (
+                                {playersPreview.slice(0, 4).map((p, i) => (
                                     <div key={i} className="rounded-full ring-2 ring-white/10">
                                         <PlayerAvatar name={p} className="w-6 h-6 text-[8px]" />
                                     </div>
                                 ))}
                             </div>
-                            {players.length > 4 && (
+                            {playerCount > 4 && (
                                 <span className="ml-1.5 text-[8px] font-black uppercase tracking-wider text-white/30">
-                                    +{players.length - 4}
+                                    +{playerCount - 4}
                                 </span>
                             )}
-                            {players.length === 0 && (
+                            {playerCount === 0 && (
                                 <span className="text-[8px] font-bold uppercase tracking-widest text-white/20 flex items-center gap-1">
                                     <Users size={9} /> 0
                                 </span>
@@ -687,5 +690,3 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
         </motion.li>
     );
 }
-
-

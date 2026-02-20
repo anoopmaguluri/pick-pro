@@ -1,0 +1,61 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "roster": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+
+    "tournaments_meta": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["createdAt", "status", "format", "winner", "playerCount"]
+    },
+
+    "tournament_data": {
+      "$tournamentId": {
+        ".read": true,
+        ".write": "auth != null",
+
+        "events": {
+          ".indexOn": ["ts", "clientEventId"],
+          "$eventId": {
+            ".validate": "newData.hasChildren(['type','mIdx','team','delta','ts']) && newData.child('type').val() === 'SCORE' && newData.child('mIdx').isNumber() && newData.child('mIdx').val() >= 0 && (newData.child('team').val() === 'A' || newData.child('team').val() === 'B') && newData.child('delta').isNumber() && (newData.child('delta').val() === 1 || newData.child('delta').val() === -1) && newData.child('ts').isNumber() && (!newData.child('clientEventId').exists() || (newData.child('clientEventId').isString() && newData.child('clientEventId').val().length <= 128)) && (!newData.child('sourceId').exists() || (newData.child('sourceId').isString() && newData.child('sourceId').val().length <= 128)) && (!newData.child('nextScore').exists() || (newData.child('nextScore').isNumber() && newData.child('nextScore').val() >= 0)) && (!newData.child('isKnockout').exists() || newData.child('isKnockout').isBoolean())"
+          }
+        },
+
+        "scoreSnapshot": {
+          ".validate": "newData.hasChildren(['createdAt']) && newData.child('createdAt').isNumber()"
+        }
+      }
+    },
+
+    "leaderboard_global": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["name", "w", "p", "pd"],
+      "$playerKey": {
+        ".validate": "newData.hasChildren(['name','p','w','l','pd','pf','pa']) && newData.child('name').isString() && newData.child('p').isNumber() && newData.child('w').isNumber() && newData.child('l').isNumber() && newData.child('pd').isNumber() && newData.child('pf').isNumber() && newData.child('pa').isNumber()"
+      }
+    },
+
+    "leaderboard_meta": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+
+    "leaderboard_applied": {
+      ".read": false,
+      ".write": "auth != null",
+      "$tournamentId": {
+        "$scope": {
+          "$idx": {
+            ".validate": "newData.val() === true || !newData.exists()"
+          }
+        }
+      }
+    }
+  }
+}

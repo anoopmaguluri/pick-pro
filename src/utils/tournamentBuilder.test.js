@@ -10,8 +10,7 @@ describe('prepareAutoTournamentResult', () => {
         expect(result.format).toBe('singles');
         expect(result.teams).toBeNull();
         expect(result.players.length).toBe(6);
-        // Singles round robin for 6 players. Every player plays 3 games (per buildSinglesRoundRobin logic)
-        // Let's just check that matches exist
+        // Singles round robin for 6 players.
         expect(result.matches.length).toBeGreaterThan(0);
         result.matches.forEach(m => {
             expect(m.tA.p1).toBeDefined();
@@ -64,5 +63,100 @@ describe('prepareAutoTournamentResult', () => {
         // Note: This test might flaky if shuffle by chance is identical, 
         // but for 6 players (3 pairs), it's highly unlikely.
         // We just want to ensure it's not a static copy.
+    });
+
+    it('should create grand final only for 2 players in singles', () => {
+        const twoPlayers = ['Alice', 'Bob'];
+        const result = prepareAutoTournamentResult('singles', twoPlayers);
+        
+        expect(result.format).toBe('singles');
+        expect(result.matches.length).toBe(0);
+        expect(result.knockouts.length).toBe(1);
+        expect(result.knockouts[0].id).toBe('final');
+        expect(result.knockouts[0].type).toBe('🏆 GRAND FINAL');
+        // Players are shuffled, so check that both are present
+        expect([result.knockouts[0].tA.name, result.knockouts[0].tB.name]).toContain('Alice');
+        expect([result.knockouts[0].tA.name, result.knockouts[0].tB.name]).toContain('Bob');
+        expect(result.knockouts[0].done).toBe(false);
+    });
+
+    it('should create grand final only for 2 teams in doubles', () => {
+        const fourPlayers = ['Alice', 'Bob', 'Charlie', 'David']; // 4 players = 2 teams
+        const result = prepareAutoTournamentResult('doubles', fourPlayers);
+        
+        expect(result.format).toBe('pairs');
+        expect(result.teams.length).toBe(2);
+        expect(result.matches.length).toBe(0);
+        expect(result.knockouts.length).toBe(1);
+        expect(result.knockouts[0].id).toBe('final');
+        expect(result.knockouts[0].type).toBe('🏆 GRAND FINAL');
+        expect(result.knockouts[0].done).toBe(false);
+    });
+
+    it('should create round robin for 3+ players in singles', () => {
+        const threePlayers = ['Alice', 'Bob', 'Charlie'];
+        const result = prepareAutoTournamentResult('singles', threePlayers);
+        
+        expect(result.format).toBe('singles');
+        expect(result.matches.length).toBeGreaterThan(0);
+        expect(result.knockouts.length).toBe(0);
+    });
+
+    it('should create round robin for 3+ teams in doubles', () => {
+        const sixPlayers = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank']; // 6 players = 3 teams
+        const result = prepareAutoTournamentResult('doubles', sixPlayers);
+        
+        expect(result.format).toBe('pairs');
+        expect(result.teams.length).toBe(3);
+        expect(result.matches.length).toBe(3); // 3C2 = 3 matches
+        expect(result.knockouts.length).toBe(0);
+    });
+
+    it('should cap fixed-team matches to 3 per team for 9+ player doubles', () => {
+        const tenPlayers = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'];
+        const result = prepareAutoTournamentResult('doubles', tenPlayers);
+
+        expect(result.format).toBe('pairs');
+        expect(result.teams.length).toBe(5);
+        expect(result.knockouts.length).toBe(0);
+        expect(result.matches.length).toBe(6); // 5 teams, capped to 3 rounds => 6 matches
+
+        const gamesPerTeam = {};
+        result.matches.forEach((m) => {
+            gamesPerTeam[m.tA.name] = (gamesPerTeam[m.tA.name] || 0) + 1;
+            gamesPerTeam[m.tB.name] = (gamesPerTeam[m.tB.name] || 0) + 1;
+        });
+
+        Object.values(gamesPerTeam).forEach((count) => {
+            expect(count).toBeLessThanOrEqual(3);
+        });
+    });
+
+    it('should preserve all players in result', () => {
+        const players = ['Alice', 'Bob', 'Charlie'];
+        const result = prepareAutoTournamentResult('singles', players);
+        
+        expect(result.players.length).toBe(3);
+        players.forEach(p => {
+            expect(result.players).toContain(p);
+        });
+    });
+
+    it('should handle empty player array', () => {
+        const result = prepareAutoTournamentResult('singles', []);
+        
+        expect(result.format).toBe('singles');
+        expect(result.players.length).toBe(0);
+        expect(result.matches.length).toBe(0);
+        expect(result.knockouts.length).toBe(0);
+    });
+
+    it('should handle single player', () => {
+        const result = prepareAutoTournamentResult('singles', ['Alice']);
+        
+        expect(result.format).toBe('singles');
+        expect(result.players.length).toBe(1);
+        expect(result.matches.length).toBe(0);
+        expect(result.knockouts.length).toBe(0);
     });
 });

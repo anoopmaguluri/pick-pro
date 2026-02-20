@@ -19,36 +19,45 @@ import LiquidTabBar from "../../common/LiquidTabBar";
 
 // ─── Confetti Particle ────────────────────────────────────────────────────────
 const CONFETTI_COLORS = ["#FFCA28", "#F57C00", "#4ADE80", "#818CF8", "#F472B6", "#38BDF8"];
+const seeded = (index, salt) => {
+    const x = Math.sin((index + 1) * (salt + 1) * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
+};
 function ConfettiRain() {
     const count = 55;
+    const particles = Array.from({ length: count }).map((_, i) => {
+        const left = `${seeded(i, 1) * 100}%`;
+        const delay = seeded(i, 2) * 2.5;
+        const dur = 2.5 + seeded(i, 3) * 2;
+        const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+        const size = 5 + Math.floor(seeded(i, 4) * 7);
+        const rot = seeded(i, 5) * 360;
+        const drift = (seeded(i, 6) - 0.5) * 120;
+        const repeatDelay = seeded(i, 7) * 1.5;
+        const borderRadius = seeded(i, 8) > 0.5 ? "50%" : 2;
+        return { i, left, delay, dur, color, size, rot, drift, repeatDelay, borderRadius };
+    });
+
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {Array.from({ length: count }).map((_, i) => {
-                const left = `${Math.random() * 100}%`;
-                const delay = Math.random() * 2.5;
-                const dur = 2.5 + Math.random() * 2;
-                const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-                const size = 5 + Math.floor(Math.random() * 7);
-                const rot = Math.random() * 360;
-                return (
-                    <motion.div
-                        key={i}
-                        initial={{ y: -20, x: 0, opacity: 1, rotate: rot }}
-                        animate={{ y: "110vh", x: (Math.random() - 0.5) * 120, opacity: [1, 1, 0], rotate: rot + 360 * 3 }}
-                        transition={{ duration: dur, delay, ease: "linear", repeat: Infinity, repeatDelay: Math.random() * 1.5 }}
-                        style={{
-                            position: "absolute",
-                            left,
-                            top: 0,
-                            width: size,
-                            height: size,
-                            borderRadius: Math.random() > 0.5 ? "50%" : 2,
-                            background: color,
-                            boxShadow: `0 0 6px ${color}88`,
-                        }}
-                    />
-                );
-            })}
+            {particles.map((p) => (
+                <motion.div
+                    key={p.i}
+                    initial={{ y: -20, x: 0, opacity: 1, rotate: p.rot }}
+                    animate={{ y: "110vh", x: p.drift, opacity: [1, 1, 0], rotate: p.rot + 360 * 3 }}
+                    transition={{ duration: p.dur, delay: p.delay, ease: "linear", repeat: Infinity, repeatDelay: p.repeatDelay }}
+                    style={{
+                        position: "absolute",
+                        left: p.left,
+                        top: 0,
+                        width: p.size,
+                        height: p.size,
+                        borderRadius: p.borderRadius,
+                        background: p.color,
+                        boxShadow: `0 0 6px ${p.color}88`,
+                    }}
+                />
+            ))}
         </div>
     );
 }
@@ -102,8 +111,14 @@ export default function TournamentView({
     // All pool matches done check
     const allMatchesDone = useMemo(() => {
         const matches = data?.matches || [];
+        const knockouts = data?.knockouts || [];
+        // If it's a 2-team bypass, matches will be empty, but we are "ready" 
+        // because we go straight to knockouts.
+        if (matches.length === 0 && (Array.isArray(knockouts) ? knockouts.length > 0 : Object.keys(knockouts).length > 0)) {
+            return true;
+        }
         return matches.length > 0 && matches.every((m) => m && m.done);
-    }, [data?.matches]);
+    }, [data?.matches, data?.knockouts]);
 
     // Celebration Logic: Only show if tournament just finished (transition),
     // or if we haven't dismissed it yet.

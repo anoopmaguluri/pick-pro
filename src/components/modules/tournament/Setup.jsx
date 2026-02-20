@@ -94,6 +94,23 @@ export default function Setup({
     }, [toastMsg]);
 
     const draftPlayers = data.draftPlayers || [];
+    const prevDraftLengthRef = React.useRef(draftPlayers.length);
+    const isManualModeEligible = matchFormat === "doubles" && draftPlayers.length >= 4 && draftPlayers.length % 2 === 0;
+
+    // When user adds 2nd player (1 → 2), default format to doubles. Don't override when removing a player (3 → 2).
+    React.useEffect(() => {
+        const prev = prevDraftLengthRef.current;
+        prevDraftLengthRef.current = draftPlayers.length;
+        if (prev === 1 && draftPlayers.length === 2) {
+            setMatchFormat("doubles");
+        }
+    }, [draftPlayers.length]);
+
+    React.useEffect(() => {
+        if (isManualMode && !isManualModeEligible) {
+            setIsManualMode(false);
+        }
+    }, [isManualMode, isManualModeEligible, setIsManualMode]);
 
     // Memoize these lists to prevent recalc on every render
     const benchedPlayers = React.useMemo(() =>
@@ -113,10 +130,15 @@ export default function Setup({
         setToastMsg({ type: 'add', text: `${p} drafted` });
     }, [toggleDraftPlayer, triggerHaptic]);
 
-    const handleAutoDraft = (fmt) => {
-        const preview = prepareAutoTournament(fmt);
-        setPreviewData(preview);
-        triggerHaptic(50);
+    const handleAutoDraft = async (fmt) => {
+        try {
+            const preview = await prepareAutoTournament(fmt);
+            setPreviewData(preview);
+            triggerHaptic(50);
+        } catch (error) {
+            console.error("Auto Draft Error:", error);
+            // Optionally show a toast or alert
+        }
     };
 
     const confirmPreview = () => {
@@ -139,6 +161,7 @@ export default function Setup({
     const availablePlayersForManual = React.useMemo(() =>
         draftPlayers.filter((p) => !manualTeams.some((team) => team.p1 === p || team.p2 === p)),
         [draftPlayers, manualTeams]);
+    const canStartManualMatches = manualTeams.length > 0 && availablePlayersForManual.length === 0 && selectedPlayers.length === 0;
 
     const glassCard = {
         background: "rgba(255,255,255,0.04)",
@@ -203,8 +226,8 @@ export default function Setup({
                             )}
                         </div>
 
-                        {/* Format Selection (Inside Left Column) */}
-                        {draftPlayers.length >= 4 && (
+                        {/* Format Selection (Inside Left Column): 2+ players (singles 2→ grand final; 4+ for round robin / manual) */}
+                        {draftPlayers.length >= 2 && (
                             <>
                                 <div className="flex items-center gap-3 py-1">
                                     <div className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(255,255,255,0.08), transparent)" }} />
@@ -217,21 +240,34 @@ export default function Setup({
                                             { id: "singles", label: "Singles" },
                                             { id: "doubles", label: "Doubles" }
                                         ]}
-                                        activeTab={matchFormat} onTabChange={setMatchFormat}
+                                        activeTab={matchFormat} onChange={setMatchFormat}
                                         containerStyle={{ background: "rgba(255,255,255,0.03)", backdropFilter: "none", padding: "4px" }}
                                         activeTabStyle={{ background: "rgba(255,255,255,0.1)" }}
                                         inactiveTabStyle={{ color: "rgba(255,255,255,0.4)" }}
                                     />
                                 </div>
                                 <div className="flex gap-3">
-                                    <LiquidButton onClick={() => handleAutoDraft(matchFormat)} variant="primary" className="flex-1" style={{ borderRadius: "1rem", padding: "1rem" }}>
+                                    <LiquidButton
+                                        onClick={() => handleAutoDraft(matchFormat)}
+                                        variant="primary"
+                                        className="flex-1"
+                                        style={{ borderRadius: "1rem", padding: "1rem" }}
+                                        disabled={matchFormat === "doubles" && draftPlayers.length < 4}
+                                    >
                                         <Zap size={16} fill="currentColor" />
                                         <span className="ml-1.5 font-bold">Auto Draft</span>
                                     </LiquidButton>
-                                    <LiquidButton onClick={() => setIsManualMode(true)} variant="secondary" className="flex-1" style={{ borderRadius: "1rem", padding: "1rem" }}>
-                                        <UsersRound size={16} /> <span className="ml-1.5 font-bold">Manual Teams</span>
-                                    </LiquidButton>
+                                    {isManualModeEligible && (
+                                        <LiquidButton onClick={() => setIsManualMode(true)} variant="secondary" className="flex-1" style={{ borderRadius: "1rem", padding: "1rem" }}>
+                                            <UsersRound size={16} /> <span className="ml-1.5 font-bold">Manual Teams</span>
+                                        </LiquidButton>
+                                    )}
                                 </div>
+                                {matchFormat === "doubles" && draftPlayers.length >= 4 && draftPlayers.length % 2 !== 0 && (
+                                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-400/80">
+                                        Manual Teams requires an even number of players.
+                                    </p>
+                                )}
                             </>
                         )}
                     </div>
@@ -387,7 +423,7 @@ export default function Setup({
                                             )}
                                         </span>
                                     </div>
-                                    {availablePlayersForManual.length < 2 && (
+                                    {canStartManualMatches && (
                                         <LiquidButton onClick={() => handleFormatSelection(manualTeams)} variant="primary" style={{ width: "100%", padding: "1.2rem", borderRadius: "1rem", fontSize: "0.8rem" }}>
                                             ⚡ Start Matches
                                         </LiquidButton>
@@ -416,7 +452,11 @@ export default function Setup({
                 subtitle={
                     previewData ? (
                         <>
-                            Generating <strong className="text-white/80">{previewData.matches.length} matches</strong> for <strong className="text-white/80">{previewData.players.length} players</strong>.
+                            {previewData.matches.length === 0 && (previewData.knockouts?.length ?? 0) > 0 ? (
+                                <>Grand Final only · <strong className="text-white/80">{previewData.players.length} players</strong></>
+                            ) : (
+                                <>Generating <strong className="text-white/80">{previewData.matches.length} matches</strong> for <strong className="text-white/80">{previewData.players.length} players</strong>.</>
+                            )}
                         </>
                     ) : null
                 }
