@@ -589,6 +589,23 @@ describe('buildMixerDoubles', () => {
         });
     });
 
+    it('should schedule 3 games for 5-player mixer while keeping teammate pairs unique', () => {
+        const players = ['Alice', 'Bob', 'Charlie', 'David', 'Eve'];
+        const matches = buildMixerDoubles(players);
+
+        expect(matches.length).toBe(3);
+
+        const partnerPairs = new Set();
+        matches.forEach((m) => {
+            const pairA = [m.tA.p1, m.tA.p2].sort().join('+');
+            const pairB = [m.tB.p1, m.tB.p2].sort().join('+');
+            expect(partnerPairs.has(pairA)).toBe(false);
+            expect(partnerPairs.has(pairB)).toBe(false);
+            partnerPairs.add(pairA);
+            partnerPairs.add(pairB);
+        });
+    });
+
     it('should not repeat partner pairs', () => {
         const players = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank'];
         const matches = buildMixerDoubles(players);

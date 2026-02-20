@@ -281,6 +281,7 @@ export const buildMixerDoubles = (players) => {
     const usedOpponentPairs = new Set(); // "A|B" for individual opponent pairings
     const usedTeamMatchups = new Set(); // "Team1 vs Team2"
     const usedQuartets = new Set(); // "A+B+C+D" (same 4-player group)
+    const enforceUniqueOpponents = players.length !== 5;
 
     const MAX_GAMES = 3;
     let safety = 0;
@@ -319,8 +320,9 @@ export const buildMixerDoubles = (players) => {
                 opponentKey(tA[1], tB[1]),
             ];
 
-            // Never repeat opponent pairings.
-            if (oppKeys.some((k) => usedOpponentPairs.has(k))) continue;
+            // For exactly 5-player mixer, allow repeated opponent pairings so we can
+            // schedule more than one game while still keeping unique teammate pairs.
+            if (enforceUniqueOpponents && oppKeys.some((k) => usedOpponentPairs.has(k))) continue;
 
             return { tA, tB, keyA, keyB, oppKeys, mKey, qKey };
         }
