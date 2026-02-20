@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 850" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="850" fill="#0f172a" />
+  <text x="450" y="45" fill="#f8fafc" font-size="28" font-weight="800" text-anchor="middle">Offline-First Scoring Data Flow</text>
+
+  <!-- Main Flow Boxes -->
+  <g filter="url(#shadow)">
+    <!-- 1 -->
+    <rect x="250" y="100" width="400" height="50" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="450" y="131" fill="#f8fafc" font-size="18" font-weight="700" text-anchor="middle">1. User Taps Score (Dev Device Offline)</text>
+    
+    <!-- 2 -->
+    <rect x="250" y="200" width="400" height="50" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="450" y="231" fill="#f8fafc" font-size="18" font-weight="600" text-anchor="middle">2. UI Updates Optimistically (0ms Latency)</text>
+    
+    <!-- 3 -->
+    <rect x="250" y="300" width="400" height="50" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="450" y="331" fill="#f8fafc" font-size="18" font-weight="600" text-anchor="middle">3. Event Queued Locally</text>
+    
+    <!-- 4 -->
+    <rect x="250" y="470" width="400" height="50" rx="8" fill="url(#primary)"/>
+    <text x="450" y="501" fill="#ffffff" font-size="18" font-weight="700" text-anchor="middle">4. Queue Flushed to Firestore</text>
+    
+    <!-- 5 -->
+    <rect x="250" y="570" width="400" height="50" rx="8" fill="#334155" stroke="#3b82f6" stroke-width="2"/>
+    <text x="450" y="601" fill="#f8fafc" font-size="18" font-weight="600" text-anchor="middle">5. Cloud Function Triggered (Eventarc)</text>
+    
+    <!-- 6 -->
+    <rect x="250" y="670" width="400" height="50" rx="8" fill="#334155" stroke="#10b981" stroke-width="2"/>
+    <text x="450" y="701" fill="#f8fafc" font-size="18" font-weight="600" text-anchor="middle">6. State &amp; Leaderboard Updated (Tx)</text>
+    
+    <!-- 7 -->
+    <rect x="250" y="770" width="400" height="50" rx="8" fill="#334155" stroke="#f59e0b" stroke-width="2"/>
+    <text x="450" y="801" fill="#f8fafc" font-size="18" font-weight="600" text-anchor="middle">7. Connected Clients Receive Real-Time Sync</text>
+  </g>
+
+  <!-- Main Paths -->
+  <path d="M 450 150 L 450 195" stroke="#94a3b8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 450 250 L 450 295" stroke="#94a3b8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  
+  <!-- Disconnect / Reconnect Dotted Line -->
+  <path d="M 450 350 L 450 465" stroke="#10b981" stroke-width="3" fill="none" stroke-dasharray="8 8" marker-end="url(#arrowGreen)"/>
+  <rect x="340" y="390" width="220" height="30" rx="15" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+  <text x="450" y="410" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">⚡ Network Connection Restored ⚡</text>
+
+  <path d="M 450 520 L 450 565" stroke="#94a3b8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 450 620 L 450 665" stroke="#94a3b8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 450 720 L 450 765" stroke="#94a3b8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Sidebar Boxes Left -->
+  <g filter="url(#shadow)">
+    <rect x="60" y="205" width="160" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+    <text x="140" y="230" fill="#cbd5e1" font-size="14" font-weight="500" text-anchor="middle">React Hooks</text>
+    <path d="M 220 225 L 245 225" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+    
+    <rect x="60" y="475" width="160" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+    <text x="140" y="500" fill="#cbd5e1" font-size="14" font-weight="500" text-anchor="middle">Firestore SDK (addDoc)</text>
+    <path d="M 220 495 L 245 495" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+    <rect x="60" y="675" width="160" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+    <text x="140" y="700" fill="#cbd5e1" font-size="14" font-weight="500" text-anchor="middle">Idempotency Guards</text>
+    <path d="M 220 695 L 245 695" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- Sidebar Boxes Right -->
+  <g filter="url(#shadow)">
+    <rect x="680" y="305" width="160" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+    <text x="760" y="330" fill="#cbd5e1" font-size="14" font-weight="500" text-anchor="middle">localforage (IndexedDB)</text>
+    <path d="M 680 325 L 655 325" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+    
+    <rect x="680" y="575" width="160" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+    <text x="760" y="600" fill="#cbd5e1" font-size="14" font-weight="500" text-anchor="middle">Node.js 22 (2nd Gen)</text>
+    <path d="M 680 595 L 655 595" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+    
+    <rect x="680" y="775" width="160" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+    <text x="760" y="800" fill="#cbd5e1" font-size="14" font-weight="500" text-anchor="middle">Firestore Listeners</text>
+    <path d="M 680 795 L 655 795" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  </g>
+</svg>

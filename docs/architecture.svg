@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+    <linearGradient id="fb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+    </marker>
+    <marker id="arrowFb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
+    </marker>
+  </defs>
+
+  <rect width="900" height="600" fill="#0f172a" />
+  
+  <text x="450" y="45" fill="#f8fafc" font-size="28" font-weight="800" text-anchor="middle">Pick-Pro OS: Serverless Architecture</text>
+  
+  <!-- Panels -->
+  <rect x="50" y="80" width="360" height="480" rx="12" fill="#1e293b" stroke="#334155" stroke-width="2" />
+  <rect x="490" y="80" width="360" height="480" rx="12" fill="#1e293b" stroke="#334155" stroke-width="2" />
+
+  <text x="230" y="115" fill="#f8fafc" font-size="18" font-weight="700" text-anchor="middle">Frontend (Vite PWA / React)</text>
+  <text x="670" y="115" fill="#f8fafc" font-size="18" font-weight="700" text-anchor="middle">Backend (Firebase Cloud)</text>
+
+  <!-- Client Boxes -->
+  <g filter="url(#shadow)">
+    <rect x="80" y="140" width="300" height="60" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="230" y="176" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">React 18 UI &amp; Tailwind CSS</text>
+    
+    <rect x="80" y="230" width="300" height="60" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="230" y="266" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">App Logic (useTournaments / useScoring)</text>
+    
+    <rect x="80" y="320" width="300" height="60" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="230" y="356" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Data Access Abstraction (db.js)</text>
+    
+    <rect x="80" y="410" width="300" height="60" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="230" y="446" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Offline Queue (localforage &amp; IndexedDB)</text>
+    
+    <rect x="80" y="500" width="300" height="40" rx="8" fill="#334155" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4"/>
+    <text x="230" y="525" fill="#cbd5e1" font-size="14" font-weight="600" text-anchor="middle">Service Worker &amp; Workbox Cache</text>
+  </g>
+
+  <!-- Firebase Boxes -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="140" width="300" height="60" rx="8" fill="#334155" stroke="#f59e0b" stroke-width="2"/>
+    <text x="670" y="176" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Firebase Hosting &amp; Authentication</text>
+    
+    <rect x="520" y="230" width="300" height="60" rx="8" fill="url(#fb)"/>
+    <text x="670" y="266" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">Cloud Firestore (Source of Truth)</text>
+    
+    <rect x="520" y="320" width="300" height="60" rx="8" fill="#334155" stroke="#f59e0b" stroke-width="2"/>
+    <text x="670" y="356" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Realtime Database (Dual-Write Legacy)</text>
+    
+    <rect x="520" y="410" width="300" height="60" rx="8" fill="#334155" stroke="#3b82f6" stroke-width="2"/>
+    <text x="670" y="446" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Eventarc (Pub/Sub Triggers)</text>
+    
+    <rect x="520" y="500" width="300" height="60" rx="8" fill="#334155" stroke="#3b82f6" stroke-width="2"/>
+    <text x="670" y="536" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Node.js 22 Cloud Functions (2nd Gen)</text>
+  </g>
+
+  <!-- Arrows Client -->
+  <path d="M 230 200 L 230 225" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 230 290 L 230 315" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 230 380 L 230 405" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Arrows Firebase -->
+  <path d="M 670 200 L 670 225" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 670 290 L 670 405" stroke="#f59e0b" stroke-width="2" fill="none" marker-end="url(#arrowFb)" stroke-dasharray="4 4"/>
+  <path d="M 670 470 L 670 495" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  
+  <path d="M 820 530 L 860 530 L 860 260 L 820 260" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Label for side path -->
+  <rect x="825" y="380" width="70" height="24" rx="4" fill="#0f172a" />
+  <text x="860" y="396" fill="#94a3b8" font-size="12" font-weight="500" text-anchor="middle">Transactions</text>
+
+  <!-- Network Arrows (Cross boundaries) -->
+  <path d="M 380 340 L 515 260" stroke="#10b981" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <rect x="405" y="270" width="80" height="24" rx="4" fill="#0f172a" />
+  <text x="445" y="286" fill="#10b981" font-size="12" font-weight="600" text-anchor="middle">Primary I/O</text>
+  
+  <path d="M 380 360 L 515 350" stroke="#94a3b8" stroke-width="2" fill="none" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <rect x="405" y="340" width="80" height="24" rx="4" fill="#0f172a" />
+  <text x="445" y="356" fill="#94a3b8" font-size="12" font-weight="500" text-anchor="middle">Legacy Sync</text>
+  
+  <path d="M 520 280 L 380 365" stroke="#10b981" stroke-width="2" fill="none" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <text x="445" y="325" fill="#10b981" font-size="10" font-weight="600" text-anchor="middle">Realtime Listeners</text>
+</svg>
