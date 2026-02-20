@@ -1,3 +1,6 @@
 [build]
   command = "yarn test:ci && yarn build"
   publish = "dist"
+
+[build.environment]
+  SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyA96usJJtS7sKrjBhHxH7qFxnUjLmFJPNU"
