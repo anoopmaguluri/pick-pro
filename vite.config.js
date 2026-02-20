@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'p-pro-s.png'],
+      includeAssets: ['p-pro-s.png', 'p-pro-logo.png', 'vite.svg'],
       manifest: {
         name: 'Pick-Pro OS',
         short_name: 'P-PRO',
@@ -33,7 +33,9 @@ export default defineConfig({
       },
       workbox: {
         // Cache Google Fonts, images, and standard assets
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
+        // Exclude catching dev-dist from the normal build output to prevent loops
+        globIgnores: ['**/node_modules/**/*', 'sw.js', 'workbox-*.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -64,6 +66,12 @@ export default defineConfig({
             }
           }
         ]
+      },
+      devOptions: {
+        enabled: true,
+        type: 'classic', // Classic is often more resilient for opaque dev requests
+        navigateFallback: 'index.html',
+        suppressWarnings: true
       }
     })
   ],

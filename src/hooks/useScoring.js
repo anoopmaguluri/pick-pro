@@ -1,7 +1,15 @@
-import { useRef, useEffect, useCallback } from "react";
-import { ref, update, push, runTransaction, increment } from "firebase/database";
+import { useRef, useEffect, useCallback, useState } from "react";
 import localforage from "localforage";
-import { db, ensureFirebaseSession } from "../services/firebase";
+import { increment } from "firebase/database";
+import { ensureFirebaseSession } from "../services/firebase";
+import {
+    dispatchScoreEvent,
+    updateScoreSnapshot,
+    confirmMatchCompleted,
+    setKnockoutMatch,
+    updateLeaderboardMarkerOnly,
+    applyRtdbLeaderboardUpdates
+} from "../services/db";
 import { useHaptic } from "./useHaptic";
 import { getKnockoutAdvancement } from "../utils/gameLogic";
 import { buildLeaderboardDeltasFromMatch, playerKeyForName } from "../utils/leaderboard";
@@ -85,12 +93,35 @@ const getOrCreateScoreSourceId = () => {
 export const useScoring = (activeTournamentId, data, isAdmin) => {
     const { trigger: triggerHaptic } = useHaptic();
     const localScores = useRef({});
+    const [optimisticScores, setOptimisticScores] = useState({});
     const sourceIdRef = useRef(getOrCreateScoreSourceId());
     const lastCompactionAtRef = useRef(0);
 
     useEffect(() => {
         localScores.current = {};
+        setOptimisticScores({});
     }, [activeTournamentId]);
+
+    // Optimistic UI Reconciliation:
+    // When the server sends new match data, if our local offline/pending queue is empty,
+    // it means all our local optimistic taps have reached the server. We can safely
+    // clear the local memory cache and snap precisely to the true server state.
+    // This inherently resolves stale conflicts because the UI will visually "snap back"
+    // to the true value if a tap was rejected by the server logic.
+    useEffect(() => {
+        let isCurrent = true;
+        void loadPendingEvents().then((queued) => {
+            if (!isCurrent) return;
+            if (queued.length === 0) {
+                localScores.current = {};
+                setOptimisticScores({});
+            }
+        });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [data.matches, data.knockouts]);
 
     const flushPendingScoreEvents = useCallback(async () => {
         const queued = await loadPendingEvents();
@@ -100,8 +131,8 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
             if (!entry?.payload || !entry?.tournamentId || !entry?.clientEventId) continue;
 
             try {
-                const eventsRef = ref(db, `tournament_data/${entry.tournamentId}/events`);
-                await push(eventsRef, entry.payload);
+                // Route through abstraction layer instead of naked push
+                await dispatchScoreEvent(entry.tournamentId, entry.payload);
                 await removePendingEvent(entry.clientEventId);
             } catch {
                 // Keep queued for the next online flush.
@@ -126,9 +157,8 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         return undefined;
     }, [flushPendingScoreEvents]);
 
-    const dispatchScoreEvent = useCallback(async (eventPayload) => {
+    const dispatchEventToBackend = useCallback(async (eventPayload) => {
         if (!activeTournamentId) return;
-        await ensureFirebaseSession();
 
         const queuedEntry = {
             clientEventId: eventPayload.clientEventId,
@@ -139,11 +169,10 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         await enqueuePendingEvent(queuedEntry);
 
         try {
-            const eventsRef = ref(db, `tournament_data/${activeTournamentId}/events`);
-            await push(eventsRef, eventPayload);
+            await dispatchScoreEvent(activeTournamentId, eventPayload);
             await removePendingEvent(eventPayload.clientEventId);
         } catch (err) {
-            console.error("Firebase Push Error (queued for retry):", err);
+            console.error("Database Push Error (queued for retry):", err);
         }
     }, [activeTournamentId]);
 
@@ -171,10 +200,7 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
 
         try {
             lastCompactionAtRef.current = now;
-            await update(ref(db, `tournament_data/${activeTournamentId}`), {
-                scoreSnapshot: snapshot,
-                events: [],
-            });
+            await updateScoreSnapshot(activeTournamentId, snapshot);
         } catch (error) {
             console.error("Event compaction failed", error);
         }
@@ -184,26 +210,16 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         if (!activeTournamentId || !match) return;
         await ensureFirebaseSession();
 
-        const markerPath = `leaderboard_applied/${activeTournamentId}/${scope}/${idx}`;
-        const markerRef = ref(db, markerPath);
-
-        try {
-            const markerTx = await runTransaction(markerRef, (current) => {
-                if (current === true) return;
-                return true;
-            });
-
-            if (!markerTx.committed) {
-                return;
-            }
-        } catch (error) {
-            console.error("Leaderboard marker transaction failed", error);
-            return;
-        }
+        // Let abstraction layer handle the marker logic (if applicable for RTDB dual-write phase)
+        const markerOk = await updateLeaderboardMarkerOnly(activeTournamentId, scope, idx);
+        if (!markerOk) return;
 
         const deltas = buildLeaderboardDeltasFromMatch(match);
         if (!deltas.length) return;
 
+        // Abstract Leaderboard updates
+        // To maintain dual-write parity while Cloud Functions are built, we will manually
+        // submit the increment updates to the db layer, which will route them to RTDB only.
         const updates = {};
         deltas.forEach((delta) => {
             const key = playerKeyForName(delta.name);
@@ -222,10 +238,9 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         if (Object.keys(updates).length === 0) return;
 
         try {
-            await update(ref(db), updates);
+            await applyRtdbLeaderboardUpdates(updates);
         } catch (error) {
             console.error("Leaderboard update failed", error);
-            await update(ref(db), { [markerPath]: null }).catch(() => {});
         }
     }, [activeTournamentId]);
 
@@ -235,13 +250,23 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         const key = `${isKnockout ? "k" : "m"}-${mIdx}-${team}`;
 
         let currentScore;
+        let expectedVersion = 0;
+
         if (localScores.current[key] !== undefined) {
             currentScore = localScores.current[key];
+            // Infer version from data even if local score is used
+            if (isKnockout && data.knockouts && data.knockouts[mIdx]) {
+                expectedVersion = data.knockouts[mIdx].version || 0;
+            } else if (!isKnockout && data.matches && data.matches[mIdx]) {
+                expectedVersion = data.matches[mIdx].version || 0;
+            }
         } else {
             if (isKnockout && data.knockouts && data.knockouts[mIdx]) {
                 currentScore = data.knockouts[mIdx][team === "A" ? "sA" : "sB"] || 0;
+                expectedVersion = data.knockouts[mIdx].version || 0;
             } else if (!isKnockout && data.matches && data.matches[mIdx]) {
                 currentScore = data.matches[mIdx][team === "A" ? "sA" : "sB"] || 0;
+                expectedVersion = data.matches[mIdx].version || 0;
             } else {
                 currentScore = 0;
             }
@@ -253,6 +278,7 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
 
         const newScore = Math.max(0, currentScore + delta);
         localScores.current[key] = newScore;
+        setOptimisticScores((prev) => ({ ...prev, [key]: newScore }));
 
         triggerHaptic(delta > 0 ? 50 : [50, 50]);
 
@@ -262,13 +288,14 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
             team,
             delta,
             nextScore: newScore,
+            expectedVersion,
             isKnockout: !!isKnockout,
             ts: Date.now(),
             sourceId: sourceIdRef.current,
             clientEventId: buildClientEventId(sourceIdRef.current),
         };
 
-        void dispatchScoreEvent(eventPayload);
+        void dispatchEventToBackend(eventPayload);
     };
 
     const confirmMatch = async (mIdx) => {
@@ -285,10 +312,7 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
 
         triggerHaptic([100, 50, 100]);
 
-        await update(ref(db), {
-            [`tournament_data/${activeTournamentId}/matches/${mIdx}/done`]: true,
-        });
-
+        await confirmMatchCompleted(activeTournamentId, mIdx, false);
         void applyMatchResultToGlobalLeaderboard({ ...match, done: true }, "matches", mIdx);
         void maybeCompactScoreEvents();
     };
@@ -305,29 +329,25 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         const selected = data.knockouts[idx];
         if (!selected || selected.done) return;
 
-        const updates = {
-            [`tournament_data/${activeTournamentId}/knockouts/${idx}/done`]: true,
-        };
-
         if (selected.id === "final") triggerHaptic([200, 100, 200, 100, 500, 100, 800]);
         else triggerHaptic([100, 50, 100]);
 
         const newKnockouts = data.knockouts.map((k, i) => (i === idx ? { ...k, done: true } : k));
         const advanced = getKnockoutAdvancement(newKnockouts, data.format, data.pools);
 
+        await confirmMatchCompleted(activeTournamentId, idx, true);
+
         if (advanced) {
             const final = advanced.find((k) => k.id === "final");
             if (final) {
-                updates[`tournament_data/${activeTournamentId}/knockouts/${data.knockouts.length}`] = final;
+                await setKnockoutMatch(activeTournamentId, data.knockouts.length, final);
             }
             triggerHaptic([100, 100, 200, 200]);
         }
-
-        await update(ref(db), updates);
 
         void applyMatchResultToGlobalLeaderboard({ ...selected, done: true }, "knockouts", idx);
         void maybeCompactScoreEvents();
     };
 
-    return { adjustScore, confirmMatch, confirmKnockout };
+    return { adjustScore, confirmMatch, confirmKnockout, optimisticScores };
 };

@@ -20,6 +20,15 @@ The app needs Firebase env vars (used in `src/services/firebase.js`):
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_MEASUREMENT_ID`
 
+Migration/runtime flags (used in `src/services/db.js`):
+
+- `VITE_READ_SOURCE` = `rtdb` | `firestore` (default: `rtdb`)
+- `VITE_WRITE_MODE` = `rtdb_only` | `dual_write` | `firestore_only` (default: `dual_write`)
+- `VITE_PREFETCH_ENABLED` = `true` | `false` (default: `true`)
+- `VITE_PREFETCH_TOURNAMENT_LIMIT` = integer (default: `8`)
+
+When `VITE_READ_SOURCE=firestore`, the app can prefetch recent tournaments (`state/current`, `matches`, `knockouts`) in the background so they are available after offline reload.
+
 Create a local env file (example):
 
 ```bash
@@ -42,10 +51,20 @@ npm run dev
 
 The app starts with Vite on host mode (`vite --host`).
 
-## Build for Production
+## Build and Preview
+
+Production mode:
 
 ```bash
 npm run build
+npm run preview
+```
+
+Development-mode build (recommended for offline testing against dev Firebase config):
+
+```bash
+npm run build -- --mode development
+npm run preview
 ```
 
 Build output is generated in:
@@ -54,11 +73,14 @@ Build output is generated in:
 dist/
 ```
 
-## Preview Production Build
+## Offline Testing Notes
 
-```bash
-npm run preview
-```
+- `npm run dev` is not a reliable offline hard-refresh test because Vite HMR endpoints require network.
+- Use `build + preview` for realistic PWA/offline behavior.
+- Test flow:
+1. Open app online once (so service worker + data cache can warm).
+2. Switch DevTools network to offline.
+3. Refresh and verify hub/tournament state.
 
 ## Tests and Lint
 
@@ -69,11 +91,29 @@ npm run lint
 
 ## Firebase Notes
 
-- Realtime Database rules are in `firebase/database.rules.json`.
-- Deploy rules with:
+- Realtime Database rules: `firebase/database.rules.json`
+- Firestore rules: `firestore.rules`
+- Firestore indexes: `firestore.indexes.json`
+
+Deploy Firebase rules/indexes:
 
 ```bash
-firebase deploy --only database
+firebase deploy --only database,firestore:rules,firestore:indexes
+```
+
+Deploy Cloud Functions:
+
+```bash
+firebase deploy --only functions
 ```
 
 - Anonymous auth must be enabled in Firebase Auth for write operations.
+- Cloud Functions (v2 / Node 22) require Blaze plan enabled on the Firebase project.
+
+## Optional Backfill Script
+
+If migrating historical data from RTDB to Firestore:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json node scripts/backfillFirestore.js
+```

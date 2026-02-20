@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { set, update, ref, get, increment } from "firebase/database";
-import { db, ensureFirebaseSession } from "./services/firebase";
+import { ensureFirebaseSession } from "./services/firebase";
+import {
+  createTournament as createTournamentRecord,
+  patchTournament,
+  finalizeTournament,
+  deleteTournament as deleteTournamentRecord,
+  updateTournamentPlayers,
+  addPlayerToRoster,
+  setKnockoutMatch
+} from "./services/db";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Components
@@ -16,10 +24,12 @@ import { useScoring } from "./hooks/useScoring";
 import { useHaptic } from "./hooks/useHaptic";
 import { buildRoundRobin, buildKnockouts, qualifyCount } from "./utils/gameLogic";
 import { calculateStandings } from "./utils/standingsCalculator";
-import { buildPlayersPreview, leaderboardRowsFromEncoded, computeTournamentPlayerStats, playerKeyForName } from "./utils/leaderboard";
+import { buildPlayersPreview, leaderboardRowsFromEncoded } from "./utils/leaderboard";
 
 import TournamentWorker from "./workers/tournamentBuilder.worker.js?worker";
 import StandingsWorker from "./workers/standings.worker.js?worker";
+
+const MotionDiv = motion.div;
 
 function App() {
   const { tournaments, leaderboardData, roster } = useTournaments();
@@ -87,7 +97,40 @@ function App() {
 
   // Passing activeTournamentId and derived data to hooks
   // Note: useScoring internally manages localScores ref
-  const { adjustScore, confirmMatch, confirmKnockout } = useScoring(activeTournamentId, data, isAdmin);
+  const { adjustScore, confirmMatch, confirmKnockout, optimisticScores } = useScoring(activeTournamentId, data, isAdmin);
+
+  const renderData = useMemo(() => {
+    if (!data) return data;
+    const keys = Object.keys(optimisticScores || {});
+    if (!keys.length) return data;
+
+    const next = {
+      ...data,
+      matches: Array.isArray(data.matches) ? [...data.matches] : [],
+      knockouts: Array.isArray(data.knockouts) ? [...data.knockouts] : [],
+    };
+
+    keys.forEach((key) => {
+      const match = key.match(/^([mk])-(\d+)-([AB])$/);
+      if (!match) return;
+      const scope = match[1] === "k" ? "knockouts" : "matches";
+      const idx = Number(match[2]);
+      const team = match[3];
+      const score = optimisticScores[key];
+
+      const list = scope === "knockouts" ? next.knockouts : next.matches;
+      const existing = list[idx];
+      if (!existing || !Number.isFinite(score)) return;
+
+      const scoreField = team === "A" ? "sA" : "sB";
+      list[idx] = {
+        ...existing,
+        [scoreField]: Math.max(0, Math.trunc(score)),
+      };
+    });
+
+    return next;
+  }, [data, optimisticScores]);
 
   const showAlert = (title, message, onConfirm = null, isDestructive = false, confirmText = "Confirm") => {
     setModal({
@@ -154,21 +197,19 @@ function App() {
   }, [leaderboardData]);
 
   const isTournamentOver = useMemo(() => {
-    if (!data?.knockouts || data.knockouts.length === 0) {
-      // If no knockouts, check if pool matches exist and are all done
-      const matches = data?.matches || [];
-      return matches.length > 0 && matches.every(m => m.done);
-    }
-    const final = data.knockouts.find((k) => k.id === "final");
+    // Tournament is considered complete only when a winner is persisted,
+    // or the knockout grand final is completed.
+    if (data?.winner) return true;
+    const final = data?.knockouts?.find((k) => k.id === "final");
     return Boolean(final?.done);
-  }, [data]);
+  }, [data?.winner, data?.knockouts]);
 
   const tournamentWinner = useMemo(() => {
-    if (!isTournamentOver) return null;
-    const final = data.knockouts.find((k) => k.id === "final");
-    if (!final) return null;
+    if (data?.winner) return data.winner;
+    const final = data?.knockouts?.find((k) => k.id === "final");
+    if (!final?.done) return null;
     return final.sA > final.sB ? final.tA.name : final.tB.name;
-  }, [isTournamentOver, data]);
+  }, [data?.winner, data?.knockouts]);
 
   // Auto-seed Grand Final when both semi-finals are done
   useEffect(() => {
@@ -185,10 +226,11 @@ function App() {
     void (async () => {
       try {
         await ensureFirebaseSession();
-        await update(ref(db), {
-          [`tournament_data/${activeTournamentId}/knockouts/${finalIdx}/tA`]: sf1Winner,
-          [`tournament_data/${activeTournamentId}/knockouts/${finalIdx}/tB`]: sf2Winner,
-          [`tournament_data/${activeTournamentId}/knockouts/${finalIdx}/pending`]: false,
+        await setKnockoutMatch(activeTournamentId, finalIdx, {
+          ...final,
+          tA: sf1Winner,
+          tB: sf2Winner,
+          pending: false,
         });
       } catch (error) {
         console.error("Failed to auto-seed grand final", error);
@@ -198,22 +240,12 @@ function App() {
 
   // Write winner + status:done to Firebase when tournament ends
   useEffect(() => {
-    if (!isTournamentOver || !activeTournamentId || data?.winner) return;
+    if (!isTournamentOver || !activeTournamentId || data?.winner || !tournamentWinner) return;
 
-    // Update both meta and data
     void (async () => {
       try {
         await ensureFirebaseSession();
-        await Promise.all([
-          update(ref(db, `tournaments_meta/${activeTournamentId}`), {
-            winner: tournamentWinner,
-            status: "done",
-          }),
-          update(ref(db, `tournament_data/${activeTournamentId}`), {
-            winner: tournamentWinner,
-            status: "done",
-          }),
-        ]);
+        await finalizeTournament(activeTournamentId, tournamentWinner);
       } catch (error) {
         console.error("Failed to finalize tournament winner", error);
       }
@@ -226,36 +258,36 @@ function App() {
     return buildPlayersPreview(players);
   };
 
-  const createTournament = async (e) => {
+  const handleCreateTournament = async (e) => {
     e.preventDefault();
     if (!newTourneyName.trim()) return;
-    const id = `t_${Date.now()}`;
+    const now = Date.now();
+    const id = `t_${now}`;
 
     try {
       await ensureFirebaseSession();
 
-      // Write lightweight shell to meta
-      await set(ref(db, `tournaments_meta/${id}`), {
-        id,
+      // Write base shell to both RTDB and Firestore via abstraction
+      const metaSummary = {
         name: newTourneyName,
-        createdAt: Date.now(),
+        createdAt: now,
         status: "draft",
         draftPlayers: [],
         playersPreview: [],
         playerCount: 0,
-      });
+      };
 
-      // Write base shell to data
-      await set(ref(db, `tournament_data/${id}`), {
-        id,
+      const fullData = {
         name: newTourneyName,
-        createdAt: Date.now(),
+        createdAt: now,
         status: "draft",
         draftPlayers: [],
         matches: [],
         knockouts: [],
-        events: [] // Event stream for scoring
-      });
+        events: []
+      };
+
+      await createTournamentRecord(id, fullData, metaSummary);
     } catch (error) {
       console.error("Failed to create tournament", error);
       showAlert("Error", "Could not create tournament right now.");
@@ -268,41 +300,13 @@ function App() {
     triggerHaptic(50);
   };
 
-  const deleteTournament = async (id) => {
-    const updates = {
-      [`tournaments_meta/${id}`]: null,
-      [`tournament_data/${id}`]: null,
-      [`leaderboard_applied/${id}`]: null,
-    };
-
+  const deleteTournamentHandler = async (id) => {
     try {
       await ensureFirebaseSession();
-      const snapshot = await get(ref(db, `tournament_data/${id}`));
-      const tournamentData = snapshot.val();
-      if (tournamentData) {
-        const stats = computeTournamentPlayerStats(tournamentData);
-        Object.values(stats).forEach((s) => {
-          const key = playerKeyForName(s.name);
-          if (!key) return;
-
-          const base = `leaderboard_global/${key}`;
-          updates[`${base}/name`] = s.name;
-          updates[`${base}/p`] = increment(-s.p);
-          updates[`${base}/w`] = increment(-s.w);
-          updates[`${base}/l`] = increment(-s.l);
-          updates[`${base}/pd`] = increment(-s.pd);
-          updates[`${base}/pf`] = increment(-s.pf);
-          updates[`${base}/pa`] = increment(-s.pa);
-        });
-      }
-
-      await update(ref(db), updates);
+      // Abstracted deletion handles meta and data in both systems
+      await deleteTournamentRecord(id);
     } catch (error) {
       console.error("Tournament delete cleanup failed", error);
-      await update(ref(db), {
-        [`tournaments_meta/${id}`]: null,
-        [`tournament_data/${id}`]: null,
-      });
     }
 
     triggerHaptic(100);
@@ -322,18 +326,13 @@ function App() {
 
       if (!roster.includes(name)) {
         const newRoster = [...roster, name].sort();
-        await set(ref(db, "roster"), newRoster);
+        await addPlayerToRoster(newRoster);
       }
 
       const newDraft = [...(data.draftPlayers || []), name];
       const summary = buildMetaPlayerSummary(newDraft);
-      await Promise.all([
-        update(ref(db, `tournaments_meta/${activeTournamentId}`), {
-          draftPlayers: newDraft,
-          ...summary,
-        }),
-        update(ref(db, `tournament_data/${activeTournamentId}`), { draftPlayers: newDraft }),
-      ]);
+
+      await updateTournamentPlayers(activeTournamentId, newDraft, summary);
     } catch (error) {
       console.error("Failed to add player", error);
       showAlert("Error", "Could not add player right now.");
@@ -354,13 +353,7 @@ function App() {
     const summary = buildMetaPlayerSummary(newDraft);
     try {
       await ensureFirebaseSession();
-      await Promise.all([
-        update(ref(db, `tournaments_meta/${activeTournamentId}`), {
-          draftPlayers: newDraft,
-          ...summary,
-        }),
-        update(ref(db, `tournament_data/${activeTournamentId}`), { draftPlayers: newDraft }),
-      ]);
+      await updateTournamentPlayers(activeTournamentId, newDraft, summary);
     } catch (error) {
       console.error("Failed to toggle draft player", error);
       return;
@@ -399,19 +392,17 @@ function App() {
     try {
       await ensureFirebaseSession();
 
-      // Write full heavy tree to data
-      await update(ref(db, `tournament_data/${activeTournamentId}`), {
-        status: "active",
+      // Write full heavy tree to data via abstraction
+      const metaSummary = buildMetaPlayerSummary(previewData.players || []);
+      const completeData = {
         ...previewData,
-        knockouts: previewData.knockouts || [],
-      });
-
-      // Write only metadata to meta
-      const summary = buildMetaPlayerSummary(previewData.players || []);
-      await update(ref(db, `tournaments_meta/${activeTournamentId}`), {
+        status: "active",
+        knockouts: previewData.knockouts || []
+      };
+      await patchTournament(activeTournamentId, completeData, {
         status: "active",
         format: previewData.format,
-        ...summary,
+        ...metaSummary,
       });
 
       triggerHaptic([100, 100, 200]);
@@ -496,21 +487,19 @@ function App() {
     try {
       await ensureFirebaseSession();
 
-      // Write massive tree to data
-      await update(ref(db, `tournament_data/${activeTournamentId}`), {
+      const metaSummary = buildMetaPlayerSummary(draftedPlayers);
+
+      const payload = {
         status: "active",
         format: "fixed",
         teams: teams,
         matches: newMatches,
         knockouts: knockouts
-      });
-
-      // Write just meta flag to meta
-      const summary = buildMetaPlayerSummary(draftedPlayers);
-      await update(ref(db, `tournaments_meta/${activeTournamentId}`), {
+      };
+      await patchTournament(activeTournamentId, payload, {
         status: "active",
         format: "fixed",
-        ...summary,
+        ...metaSummary
       });
 
       triggerHaptic(100);
@@ -534,14 +523,14 @@ function App() {
     const knockouts = buildKnockouts(standings.slice(0, qCount), qCount, isMixer);
     try {
       await ensureFirebaseSession();
-      await set(ref(db, `tournament_data/${activeTournamentId}/knockouts`), knockouts);
+      await Promise.all(knockouts.map((k, idx) => setKnockoutMatch(activeTournamentId, idx, k)));
+
       triggerHaptic([50, 50, 100]);
     } catch (error) {
       console.error("Failed to generate knockouts", error);
       showAlert("Error", "Could not generate knockouts right now.");
     }
   };
-
 
   const handleStandingsLongPress = () => {
     if (!isAdmin) return;
@@ -562,7 +551,7 @@ function App() {
 
       <AnimatePresence mode="wait" initial={false}>
         {activeTournamentId ? (
-          <motion.div
+          <MotionDiv
             key="tournament-view"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -570,7 +559,7 @@ function App() {
             transition={{ duration: 0.3 }}
           >
             <TournamentView
-              data={data}
+              data={renderData}
               roster={roster}
               isAdmin={isAdmin}
               setIsAdmin={setIsAdmin}
@@ -606,9 +595,9 @@ function App() {
               isTournamentOver={isTournamentOver}
               tournamentWinner={tournamentWinner}
             />
-          </motion.div>
+          </MotionDiv>
         ) : (
-          <motion.div
+          <MotionDiv
             key="tournament-hub"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -618,8 +607,8 @@ function App() {
             <TournamentHub
               tournaments={tournaments}
               setActiveTournamentId={setActiveTournamentId}
-              createTournament={createTournament}
-              deleteTournament={deleteTournament}
+              createTournament={handleCreateTournament}
+              deleteTournament={deleteTournamentHandler}
               newTourneyName={newTourneyName}
               setNewTourneyName={setNewTourneyName}
               globalLeaderboard={globalLeaderboard}
@@ -628,7 +617,7 @@ function App() {
               hubTab={hubTab}
               setHubTab={setHubTab}
             />
-          </motion.div>
+          </MotionDiv>
         )}
       </AnimatePresence>
     </ErrorBoundary>

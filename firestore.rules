@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null; // Temporarily allow any authenticated anonymous user to write for dev purposes. Replace with custom claim in prod.
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /state/current {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      
+      match /matches/{matchId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+
+      match /knockouts/{knockoutId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+
+      match /events/{eventId} {
+        allow read: if true;
+        allow create: if isAdmin() 
+          && request.resource.data.delta in [1, -1]
+          && request.resource.data.team in ['A', 'B']
+          && request.resource.data.mIdx is number
+          && request.resource.data.sourceId is string
+          && (
+             request.resource.data.delta == 1 ||
+             (request.resource.data.delta == -1 && 
+              request.resource.data.nextScore is number && 
+              request.resource.data.expectedVersion is number)
+          );
+        allow update, delete: if false; // Only server can update events (for status tracking)
+      }
+    }
+
+    match /leaderboard/{playerKey} {
+      allow read: if true;
+      allow write: if false; // Only Cloud Functions can write leaderboard
+    }
+
+    match /settings/roster {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

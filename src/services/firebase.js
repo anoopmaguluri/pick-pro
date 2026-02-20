@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager
+} from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -14,7 +19,18 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// Keep RTDB active for dual-write migration phase
 export const db = getDatabase(app);
+
+// Initialize Firestore with explicit IndexedDB offline persistence
+// Using persistentSingleTabManager as recommended for simple PWAs to avoid multi-tab lock contention issues
+export const firestore = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentSingleTabManager()
+  })
+});
+
 export const auth = getAuth(app);
 
 let authSessionPromise = null;
@@ -27,4 +43,12 @@ export const ensureFirebaseSession = () => {
     });
   }
   return authSessionPromise;
+};
+
+// Expose a check for offline eviction (Safari PWA guardrail)
+export const checkAndRefreshAuth = async () => {
+  if (!auth.currentUser) {
+    authSessionPromise = null; // force fresh call
+    await ensureFirebaseSession();
+  }
 };
