@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+    </marker>
+  </defs>
+
+  <rect width="900" height="600" fill="#0f172a" />
+  
+  <text x="450" y="45" fill="#f8fafc" font-size="28" font-weight="800" text-anchor="middle">Dual-Write Data Abstraction Layer (`db.js`)</text>
+
+  <!-- React Layer -->
+  <g filter="url(#shadow)">
+    <rect x="250" y="90" width="400" height="60" rx="8" fill="#334155" stroke="#c084fc" stroke-width="2"/>
+    <text x="450" y="125" fill="#f8fafc" font-size="18" font-weight="700" text-anchor="middle">React Components &amp; Hooks</text>
+    <text x="450" y="145" fill="#cbd5e1" font-size="12" font-weight="500" text-anchor="middle">(useTournaments, useScoring, patchTournament, createTournament)</text>
+  </g>
+
+  <!-- The Abstraction Layer -->
+  <g filter="url(#shadow)">
+    <rect x="150" y="220" width="600" height="100" rx="12" fill="url(#primary)"/>
+    <text x="450" y="255" fill="#ffffff" font-size="20" font-weight="800" text-anchor="middle">Data Access Abstraction (`src/services/db.js`)</text>
+    
+    <!-- Environment Flags -->
+    <rect x="220" y="275" width="220" height="30" rx="4" fill="#0f172a" />
+    <text x="330" y="295" fill="#fcd34d" font-size="12" font-weight="600" text-anchor="middle">VITE_READ_SOURCE="firestore"</text>
+
+    <rect x="460" y="275" width="220" height="30" rx="4" fill="#0f172a" />
+    <text x="570" y="295" fill="#fcd34d" font-size="12" font-weight="600" text-anchor="middle">VITE_WRITE_MODE="dual_write"</text>
+  </g>
+
+  <path d="M 450 150 L 450 210" stroke="#94a3b8" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Lower Split -->
+  <!-- Left Side: RTDB -->
+  <g filter="url(#shadow)">
+    <rect x="100" y="400" width="300" height="140" rx="8" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+    <text x="250" y="430" fill="#3b82f6" font-size="18" font-weight="700" text-anchor="middle">Realtime Database (RTDB)</text>
+    <text x="250" y="455" fill="#94a3b8" font-size="14" text-anchor="middle">Current secondary system</text>
+    
+    <rect x="120" y="475" width="260" height="50" rx="4" fill="#0f172a" />
+    <text x="250" y="495" fill="#cbd5e1" font-size="12" text-anchor="middle">Structure: Monolithic JSON trees.</text>
+    <text x="250" y="515" fill="#cbd5e1" font-size="12" text-anchor="middle">Updates: `updateRtdb(ref(rtdb), patch)`</text>
+  </g>
+
+  <!-- Right Side: Firestore -->
+  <g filter="url(#shadow)">
+    <rect x="500" y="400" width="300" height="140" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
+    <text x="650" y="430" fill="#f59e0b" font-size="18" font-weight="700" text-anchor="middle">Cloud Firestore</text>
+    <text x="650" y="455" fill="#94a3b8" font-size="14" text-anchor="middle">Primary PWA system (Scalable Cache)</text>
+    
+    <rect x="520" y="475" width="260" height="50" rx="4" fill="#0f172a" />
+    <text x="650" y="495" fill="#cbd5e1" font-size="12" text-anchor="middle">Structure: Collections, Docs, Subcollections.</text>
+    <text x="650" y="515" fill="#cbd5e1" font-size="12" text-anchor="middle">Updates: Batched Transactions (`writeBatch`)</text>
+  </g>
+
+  <!-- Arrows branching down -->
+  <path d="M 350 320 L 250 390" stroke="#fcd34d" stroke-width="3" stroke-dasharray="6 6" fill="none" marker-end="url(#arrow)"/>
+  <rect x="180" y="340" width="100" height="20" rx="4" fill="#0f172a" />
+  <text x="230" y="354" fill="#94a3b8" font-size="12" text-anchor="middle">Write Legacy</text>
+
+  <path d="M 550 320 L 650 390" stroke="#fcd34d" stroke-width="3" stroke-dasharray="6 6" fill="none" marker-end="url(#arrow)"/>
+  <rect x="620" y="340" width="100" height="20" rx="4" fill="#0f172a" />
+  <text x="670" y="354" fill="#94a3b8" font-size="12" text-anchor="middle">Write Primary</text>
+
+  <path d="M 680 400 L 580 320" stroke="#10b981" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+  <rect x="640" y="370" width="60" height="20" rx="4" fill="#1e293b" />
+  <text x="670" y="384" fill="#10b981" font-size="12" font-weight="700" text-anchor="middle">Read</text>
+</svg>
