@@ -13,7 +13,7 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 import { useTournaments } from "./hooks/useTournaments";
 import { useScoring } from "./hooks/useScoring";
 import { useHaptic } from "./hooks/useHaptic";
-import { processMatches, determineStatus, buildPairedTeams, buildRoundRobin, buildSinglesRoundRobin, buildMixerDoubles, buildKnockouts, qualifyCount } from "./utils/gameLogic";
+import { processMatches, determineStatus, buildPairedTeams, buildRoundRobin, buildSinglesRoundRobin, buildMixerDoubles, buildKnockouts, qualifyCount, intelligentSort } from "./utils/gameLogic";
 import { prepareAutoTournamentResult } from "./utils/tournamentBuilder";
 
 function App() {
@@ -84,7 +84,7 @@ function App() {
     if ((data.format === "pairs" || data.format === "fixed") && data.teams) {
       const teamStats = {};
       data.teams.forEach((t) => {
-        teamStats[t.name] = { name: t.name, p1: t.p1, p2: t.p2, p: 0, w: 0, l: 0, pd: 0, form: [] };
+        teamStats[t.name] = { name: t.name, p1: t.p1, p2: t.p2, p: 0, w: 0, l: 0, pd: 0, pf: 0, pa: 0, form: [] };
       });
 
       if (data.matches) {
@@ -105,9 +105,7 @@ function App() {
         });
       }
 
-      const sortedTeams = Object.values(teamStats).sort((a, b) =>
-        b.w !== a.w ? b.w - a.w : b.pd !== a.pd ? b.pd - a.pd : b.p - a.p
-      );
+      const sortedTeams = intelligentSort(Object.values(teamStats), data.matches);
       const qCount = qualifyCount(sortedTeams.length);
       // For fixed teams (N teams), each team plays N-1 matches
       determineStatus(sortedTeams, qCount, sortedTeams.length - 1, allMatchesDone);
@@ -118,14 +116,12 @@ function App() {
     const stats = {};
     const players = data.players || data.draftPlayers || [];
     players.forEach((p) => {
-      stats[p] = { name: p, p1: p, p2: null, p: 0, w: 0, l: 0, pd: 0, form: [] };
+      stats[p] = { name: p, p1: p, p2: null, p: 0, w: 0, l: 0, pd: 0, pf: 0, pa: 0, form: [] };
     });
 
     if (data.matches) processMatches(data.matches, stats);
 
-    const sorted = Object.values(stats).sort((a, b) =>
-      b.w !== a.w ? b.w - a.w : b.pd !== a.pd ? b.pd - a.pd : b.p - a.p
-    );
+    const sorted = intelligentSort(Object.values(stats), data.matches);
 
     const qCount = qualifyCount(sorted.length);
 

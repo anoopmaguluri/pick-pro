@@ -12,21 +12,23 @@ export const processMatches = (matchesArray, stats) => {
             const pdA = m.sA - m.sB;
             const pdB = m.sB - m.sA;
 
-            const updateP = (pName, won, pd) => {
+            const updateP = (pName, won, pd, pf, pa) => {
                 if (!pName) return;
                 if (!stats[pName])
-                    stats[pName] = { name: pName, p1: pName, p2: null, p: 0, w: 0, l: 0, pd: 0, form: [] };
+                    stats[pName] = { name: pName, p1: pName, p2: null, p: 0, w: 0, l: 0, pd: 0, pf: 0, pa: 0, form: [] };
                 stats[pName].p++;
                 if (won) stats[pName].w++;
                 else stats[pName].l++;
                 stats[pName].pd += pd;
+                stats[pName].pf += pf;
+                stats[pName].pa += pa;
                 stats[pName].form.push(won ? "W" : "L");
             };
 
-            updateP(p1, aWon, pdA);
-            updateP(p2, aWon, pdA);
-            updateP(p3, !aWon, pdB);
-            updateP(p4, !aWon, pdB);
+            updateP(p1, aWon, pdA, m.sA, m.sB);
+            updateP(p2, aWon, pdA, m.sA, m.sB);
+            updateP(p3, !aWon, pdB, m.sB, m.sA);
+            updateP(p4, !aWon, pdB, m.sB, m.sA);
         }
     });
 };
@@ -370,3 +372,118 @@ export const determineStatus = (sorted, qCount, totalMatchesEach, allMatchesFini
 
 /** How many teams/players advance to knockouts based on total count */
 export const qualifyCount = (numTeams) => (numTeams >= 5 ? 4 : 2);
+
+/**
+ * Pure function to determine if a new knockout round (e.g. Grand Final) 
+ * should be generated based on the completion of the current round's matches.
+ * 
+ * @param {Array} currentKnockouts - The existing list of knockout match objects
+ * @param {string} format - Tournament format ("fixed", "pairs", "mixer", etc.)
+ * @param {number} pools - Number of pools (if applicable)
+ * @returns {Array|null} New array of knockouts with the next round added, or null if no advancement.
+ */
+export const getKnockoutAdvancement = (currentKnockouts, format, pools) => {
+    // Currently we only handle SF1+SF2 -> Grand Final bridge
+    if (currentKnockouts.length !== 2) return null;
+    if (!currentKnockouts[0].done || !currentKnockouts[1].done) return null;
+    // Final already exists check
+    if (currentKnockouts.some(k => k.id === "final")) return null;
+
+    // Only advance for fixed pairs or 2-pool setups with 4-team semis
+    if (format === "fixed" || format === "pairs" || pools === 2) {
+        const winner1 = currentKnockouts[0].sA > currentKnockouts[0].sB
+            ? currentKnockouts[0].tA
+            : currentKnockouts[0].tB;
+        const winner2 = currentKnockouts[1].sA > currentKnockouts[1].sB
+            ? currentKnockouts[1].tA
+            : currentKnockouts[1].tB;
+
+        return [
+            ...currentKnockouts,
+            {
+                id: "final",
+                type: "🏆 GRAND FINAL",
+                tA: winner1,
+                tB: winner2,
+                sA: 0,
+                sB: 0,
+                done: false,
+            }
+        ];
+    }
+
+    return null;
+};
+
+// ─── Intelligent Tie-Breaking ──────────────────────────────────────────────────
+
+/**
+ * Intelligent sorting logic for standings.
+ * Order of resolution:
+ * 1. Wins (W)
+ * 2. Point Differential (PD)
+ * 3. Head-to-Head (H2H) Matchups
+ * 4. Points For (PF)
+ * 5. Points Against (PA)
+ * 6. Alphabetical (Name)
+ * 
+ * @param {Array} standingsArray - Array of standings objects
+ * @param {Array} matches - Full array of matches to compute H2H
+ * @returns {Array} The deterministically sorted standings array
+ */
+export const intelligentSort = (standingsArray, matches = []) => {
+    return standingsArray.sort((a, b) => {
+        // 1. Wins (higher is better)
+        if (b.w !== a.w) return b.w - a.w;
+
+        // 2. Point Differential (higher is better)
+        if (b.pd !== a.pd) return b.pd - a.pd;
+
+        // 3. Head-to-Head (H2H)
+        // Check if these two specific entities (teams or players) played each other
+        if (matches && matches.length > 0) {
+            const h2hMatches = matches.filter(m => m.done && (
+                // Team format checks
+                (m.tA.name === a.name && m.tB.name === b.name) ||
+                (m.tA.name === b.name && m.tB.name === a.name) ||
+                // Singles or Mixer format checks (Player vs Player)
+                (m.tA.p1 === a.name && m.tB.p1 === b.name) ||
+                (m.tA.p1 === b.name && m.tB.p1 === a.name) ||
+                (m.tA.p2 === a.name && m.tB.p2 === b.name) ||
+                (m.tA.p2 === b.name && m.tB.p2 === a.name) ||
+                (m.tA.p1 === a.name && m.tB.p2 === b.name) ||
+                (m.tA.p2 === a.name && m.tB.p1 === b.name)
+            ));
+
+            if (h2hMatches.length > 0) {
+                let aH2hWins = 0;
+                let bH2hWins = 0;
+
+                h2hMatches.forEach(m => {
+                    const aIsTeamA = m.tA.name === a.name || m.tA.p1 === a.name || m.tA.p2 === a.name;
+                    const aIsTeamB = m.tB.name === a.name || m.tB.p1 === a.name || m.tB.p2 === a.name;
+
+                    if (aIsTeamA) {
+                        if (m.sA > m.sB) aH2hWins++;
+                        else if (m.sB > m.sA) bH2hWins++;
+                    } else if (aIsTeamB) {
+                        if (m.sB > m.sA) aH2hWins++;
+                        else if (m.sA > m.sB) bH2hWins++;
+                    }
+                });
+
+                if (bH2hWins !== aH2hWins) return bH2hWins - aH2hWins;
+            }
+        }
+
+        // 4. Points For (PF) - higher is better
+        if (b.pf !== a.pf) return (b.pf || 0) - (a.pf || 0);
+
+        // 5. Points Against (PA) - lower is better
+        if (a.pa !== b.pa) return (a.pa || 0) - (b.pa || 0);
+
+        // 6. Alphabetical Fallback (determinstic)
+        return a.name.localeCompare(b.name);
+    });
+};
+

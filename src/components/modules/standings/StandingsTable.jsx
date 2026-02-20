@@ -12,6 +12,7 @@ export default function StandingsTable({
     generateKnockouts,
     isKnockoutStarted,
     qualifyCount: qCount = 2,
+    isTournamentOver,
 }) {
     // Label for the knockout-generate button based on qualifier count
     const knockoutLabel = qCount >= 4
@@ -47,21 +48,24 @@ export default function StandingsTable({
                     }}>
                     <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest leading-none"
                         style={{ color: "rgba(255,202,40,0.8)" }}>
-                        {/* Pulsing LIVE dot */}
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                                style={{ background: "#22c55e" }} />
-                            <span className="relative inline-flex rounded-full h-2 w-2"
-                                style={{ background: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.8)" }} />
-                        </span>
-                        Live Standings
+                        {isTournamentOver ? (
+                            <span className="text-[10px] leading-none mb-[2px]">🏆</span>
+                        ) : (
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                                    style={{ background: "#22c55e" }} />
+                                <span className="relative inline-flex rounded-full h-2 w-2"
+                                    style={{ background: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.8)" }} />
+                            </span>
+                        )}
+                        {isTournamentOver ? "Final Standings" : "Live Standings"}
                     </span>
                     <div className="flex gap-3 text-[9px] font-black uppercase tracking-wider leading-none"
                         style={{ color: "rgba(255,255,255,0.25)" }}>
                         <span style={{ width: 24, textAlign: "center" }}>MP</span>
                         <span style={{ width: 24, textAlign: "center" }}>W</span>
                         <span style={{ width: 32, textAlign: "center" }}>PD</span>
-                        <span style={{ width: 24, textAlign: "center" }}>PTS</span>
+                        <span style={{ width: 40, textAlign: "center" }}>PF/PA</span>
                     </div>
                 </div>
 
@@ -184,7 +188,9 @@ export default function StandingsTable({
                                     <span className={`w-8 text-center text-xs font-bold leading-none ${t.pd > 0 ? "text-green-400" : t.pd < 0 ? "text-red-400" : "text-white/30"}`}>
                                         {t.pd > 0 ? "+" : ""}{t.pd}
                                     </span>
-                                    <span className="w-6 text-center text-sm font-black text-amber-400 leading-none">{t.w}</span>
+                                    <span className="w-10 text-center text-[10px] font-bold text-amber-400/80 leading-none">
+                                        {t.pf || 0}<span className="text-white/30 mx-0.5">:</span>{t.pa || 0}
+                                    </span>
                                 </div>
 
                                 {/* Status Bars (Right Edge) */}

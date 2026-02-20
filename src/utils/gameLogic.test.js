@@ -1,4 +1,4 @@
-import { processMatches, buildKnockouts, determineStatus } from './gameLogic';
+import { processMatches, buildKnockouts, determineStatus, getKnockoutAdvancement, intelligentSort } from './gameLogic';
 import { describe, it, expect } from 'vitest';
 
 describe('processMatches', () => {
@@ -122,5 +122,111 @@ describe('determineStatus', () => {
         expect(standings[0].analysis.probability).toBeGreaterThan(70);
         // P4 should have very low probability
         expect(standings[3].analysis.probability).toBeLessThan(30);
+    });
+});
+
+describe('getKnockoutAdvancement', () => {
+    it('should return null if not exactly 2 matches', () => {
+        expect(getKnockoutAdvancement([], 'pairs', 0)).toBeNull();
+        expect(getKnockoutAdvancement([{}], 'pairs', 0)).toBeNull();
+    });
+
+    it('should return null if any match is not done', () => {
+        const matches = [
+            { done: true },
+            { done: false }
+        ];
+        expect(getKnockoutAdvancement(matches, 'pairs', 0)).toBeNull();
+    });
+
+    it('should return null if final already exists', () => {
+        const matches = [
+            { id: 'sf1', done: true },
+            { id: 'final', done: true }
+        ];
+        expect(getKnockoutAdvancement(matches, 'pairs', 0)).toBeNull();
+    });
+
+    it('should correctly generate grand final from winners', () => {
+        const matches = [
+            {
+                id: 'sf1', done: true,
+                tA: { name: 'Alice' }, tB: { name: 'Bob' },
+                sA: 11, sB: 5
+            },
+            {
+                id: 'sf2', done: true,
+                tA: { name: 'Charlie' }, tB: { name: 'David' },
+                sA: 8, sB: 11
+            }
+        ];
+        const result = getKnockoutAdvancement(matches, 'pairs', 0);
+        expect(result.length).toBe(3);
+        expect(result[2].id).toBe('final');
+        expect(result[2].tA.name).toBe('Alice');
+        expect(result[2].tB.name).toBe('David');
+    });
+});
+
+describe('intelligentSort', () => {
+    it('should sort primarily by Wins', () => {
+        const standings = [
+            { name: 'A', w: 1, pd: 10, pf: 20, pa: 10 },
+            { name: 'B', w: 3, pd: 2, pf: 15, pa: 13 }
+        ];
+        const sorted = intelligentSort(standings);
+        expect(sorted[0].name).toBe('B');
+        expect(sorted[1].name).toBe('A');
+    });
+
+    it('should fallback to Point Differential if Wins are tied', () => {
+        const standings = [
+            { name: 'A', w: 2, pd: 5, pf: 20, pa: 15 },
+            { name: 'B', w: 2, pd: 10, pf: 25, pa: 15 }
+        ];
+        const sorted = intelligentSort(standings);
+        expect(sorted[0].name).toBe('B');
+    });
+
+    it('should use Head-to-Head if W and PD are tied', () => {
+        const standings = [
+            { name: 'TeamA', w: 2, pd: 5, pf: 25, pa: 20 },
+            { name: 'TeamB', w: 2, pd: 5, pf: 25, pa: 20 }
+        ];
+        const matches = [
+            { done: true, tA: { name: 'TeamA' }, tB: { name: 'TeamB' }, sA: 11, sB: 9 } // TeamA beat TeamB
+        ];
+        const sorted = intelligentSort(standings, matches);
+        expect(sorted[0].name).toBe('TeamA');
+    });
+
+    it('should fallback to Points For (PF) if W, PD, and H2H are tied', () => {
+        const standings = [
+            { name: 'TeamA', w: 2, pd: 5, pf: 30, pa: 25 },
+            { name: 'TeamB', w: 2, pd: 5, pf: 35, pa: 30 }
+        ];
+        // They haven't played each other
+        const sorted = intelligentSort(standings, []);
+        // TeamB has higher PF (35 vs 30)
+        expect(sorted[0].name).toBe('TeamB');
+    });
+
+    it('should fallback to Points Against (PA) if W, PD, H2H, and PF are tied', () => {
+        const standings = [
+            { name: 'TeamA', w: 2, pd: 5, pf: 30, pa: 25 },
+            { name: 'TeamB', w: 2, pd: 5, pf: 30, pa: 20 } // TeamB conceded fewer
+        ];
+        const sorted = intelligentSort(standings, []);
+        // TeamB has lower PA
+        expect(sorted[0].name).toBe('TeamB');
+    });
+
+    it('should fallback to Alphabetical if absolute deadlock', () => {
+        const standings = [
+            { name: 'Zeta', w: 2, pd: 5, pf: 30, pa: 25 },
+            { name: 'Alpha', w: 2, pd: 5, pf: 30, pa: 25 }
+        ];
+        const sorted = intelligentSort(standings, []);
+        expect(sorted[0].name).toBe('Alpha');
     });
 });

@@ -215,7 +215,7 @@ export default function TournamentView({
                     <h1 className="text-sm font-black italic tracking-tight uppercase text-white">{data?.name || "Tournament"}</h1>
                     <span className="text-[8px] font-bold uppercase tracking-widest mt-0.5"
                         style={{ color: isSetupMode ? "rgba(255,255,255,0.3)" : "rgba(255,202,40,0.7)" }}>
-                        {isSetupMode ? "Setup Mode" : "⚡ Live Event"}
+                        {isSetupMode ? "Setup Mode" : isTournamentOver ? "🏁 Event Completed" : "⚡ Live Event"}
                     </span>
                 </div>
 
@@ -295,6 +295,7 @@ export default function TournamentView({
                                                     generateKnockouts={generateKnockouts}
                                                     isKnockoutStarted={data.knockouts?.length > 0}
                                                     qualifyCount={qCount}
+                                                    isTournamentOver={isTournamentOver}
                                                 />
                                             </div>
                                         </motion.div>

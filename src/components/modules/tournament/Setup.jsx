@@ -45,19 +45,16 @@ const BenchPlayerItem = React.memo(({ p, onAdd }) => (
         exit={{ scale: 0.8, opacity: 0, transition: { duration: 0.15 } }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
         onClick={() => onAdd(p)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase overflow-hidden whitespace-nowrap cursor-pointer hover:text-white transition-all group origin-left"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase overflow-hidden whitespace-nowrap cursor-pointer transition-all origin-left text-white/50"
         style={{
             background: "rgba(0,0,0,0.5)",
             border: "1px solid rgba(255,255,255,0.05)",
-            color: "rgba(255,255,255,0.5)",
             boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)"
         }}
-        whileHover={{ scale: 1.05, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.2)" }}
-        whileTap={{ scale: 0.95 }}
     >
-        <PlayerAvatar name={p} className="w-5 h-5 text-[7px] opacity-60 shrink-0 group-hover:opacity-100 transition-opacity" />
-        <span className="group-hover:text-white transition-colors">{p}</span>
-        <Plus size={10} className="opacity-40 group-hover:opacity-100 group-hover:text-amber-400 transition-colors" />
+        <PlayerAvatar name={p} className="w-5 h-5 text-[7px] opacity-60 shrink-0" />
+        <span>{p}</span>
+        <Plus size={10} className="opacity-40" />
     </motion.div>
 ));
 
