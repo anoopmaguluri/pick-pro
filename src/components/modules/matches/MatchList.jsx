@@ -36,6 +36,7 @@ export default function MatchList({
     adjustScore,
     confirmMatch,
     confirmKnockout,
+    pointsToWin,
 }) {
     const semis = (knockouts || []).filter((k) => k.id === "sf1" || k.id === "sf2");
     const finals = (knockouts || []).filter((k) => k.id === "final");
@@ -71,6 +72,7 @@ export default function MatchList({
                                     match={m} idx={finalKIdx} type="knockout" isAdmin={isAdmin}
                                     onScore={(team, delta) => adjustScore(finalKIdx, team, delta, true)}
                                     onConfirm={() => confirmKnockout(finalKIdx)}
+                                    pointsToWin={pointsToWin}
                                 />
                             ))
                         )}
@@ -90,6 +92,7 @@ export default function MatchList({
                                     match={m} idx={idx} type="knockout" isAdmin={isAdmin}
                                     onScore={(team, delta) => adjustScore(idx, team, delta, true)}
                                     onConfirm={() => confirmKnockout(idx)}
+                                    pointsToWin={pointsToWin}
                                 />
                             ))}
                         </div>
@@ -110,6 +113,7 @@ export default function MatchList({
                                 match={m} idx={idx} type="pool" isAdmin={isAdmin}
                                 onScore={(team, delta) => adjustScore(idx, team, delta, false)}
                                 onConfirm={() => confirmMatch(idx)}
+                                pointsToWin={pointsToWin}
                             />
                         ))}
                     </div>

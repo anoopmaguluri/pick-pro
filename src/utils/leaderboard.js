@@ -149,13 +149,39 @@ export const buildEncodedLeaderboardFromTournaments = (tournamentsById) => {
 };
 
 export const leaderboardRowsFromEncoded = (encodedMap) => {
+    const computeTournamentRating = (stats) => {
+        const played = toNumber(stats?.p);
+        if (played <= 0) return 3.0;
+
+        const wins = toNumber(stats?.w);
+        const pointDiff = toNumber(stats?.pd);
+        const pointsFor = toNumber(stats?.pf);
+        const pointsAgainst = toNumber(stats?.pa);
+
+        const winRate = wins / played;
+        const pdPerGame = pointDiff / played;
+        const scoringShare = (pointsFor + pointsAgainst) > 0
+            ? pointsFor / (pointsFor + pointsAgainst)
+            : 0.5;
+
+        // Tournament-style pickleball skill scale (2.00 - 8.00).
+        const volumeBoost = Math.min(0.3, played * 0.01);
+        const raw = 2.4
+            + (winRate * 3.0)
+            + (pdPerGame * 0.05)
+            + ((scoringShare - 0.5) * 1.2)
+            + volumeBoost;
+
+        return Math.max(2.0, Math.min(8.0, raw));
+    };
+
     return Object.values(encodedMap || {})
         .map((raw) => normalizeStatsRecord(raw))
         .filter(Boolean)
         .map((s) => {
             const played = s.p;
             const winRate = played > 0 ? (s.w / played) : 0;
-            const rating = 3.5 + (s.w * 0.1 + s.pd * 0.01);
+            const rating = computeTournamentRating(s);
             return {
                 ...s,
                 winRate,
@@ -163,7 +189,13 @@ export const leaderboardRowsFromEncoded = (encodedMap) => {
                 rating: rating.toFixed(2),
             };
         })
-        .sort((a, b) => Number(b.rating) - Number(a.rating))
+        .sort((a, b) =>
+            Number(b.rating) - Number(a.rating) ||
+            b.winRate - a.winRate ||
+            b.w - a.w ||
+            b.pd - a.pd ||
+            a.name.localeCompare(b.name)
+        )
         .slice(0, 50);
 };
 

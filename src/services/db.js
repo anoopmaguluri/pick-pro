@@ -65,7 +65,7 @@ const setDefinedPathUpdates = (target, basePath, patch = {}) => {
 
 const buildStatePatch = (dataPatch = {}) => {
     const statePatch = {};
-    ["draftPlayers", "players", "teams", "pools", "scoreSnapshot"].forEach((field) => {
+    ["draftPlayers", "players", "teams", "pools", "scoreSnapshot", "pointsToWin"].forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(dataPatch, field)) {
             statePatch[field] = dataPatch[field];
         }
@@ -75,7 +75,7 @@ const buildStatePatch = (dataPatch = {}) => {
 
 const buildRootPatchFromData = (dataPatch = {}) => {
     const rootPatch = {};
-    ["name", "status", "format", "createdAt", "winner"].forEach((field) => {
+    ["name", "status", "format", "createdAt", "winner", "pointsToWin"].forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(dataPatch, field)) {
             rootPatch[field] = dataPatch[field];
         }
@@ -479,6 +479,21 @@ export const updateLeaderboardMarkerOnly = async (tournamentId, scope, idx) => {
         }
     }
     return true; // If Firestore only, function handles it implicitly
+};
+
+export const clearLeaderboardMarker = async (tournamentId, scope, idx) => {
+    if (FLAGS.WRITE_MODE === "rtdb_only" || FLAGS.WRITE_MODE === "dual_write") {
+        await requireAuth();
+        const markerPath = `leaderboard_applied/${tournamentId}/${scope}/${idx}`;
+        try {
+            await updateRtdb(ref(rtdb), { [markerPath]: null });
+            return true;
+        } catch (e) {
+            console.error(e);
+            return false;
+        }
+    }
+    return true;
 };
 
 export const applyRtdbLeaderboardUpdates = async (updates) => {

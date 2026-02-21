@@ -1,61 +1,66 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useHaptic } from "../../../hooks/useHaptic";
-import { Plus, Trash2, UsersRound, UserPlus, Zap, Check, RotateCcw, Shuffle, X } from "lucide-react";
+import { Plus, Trash2, UsersRound, UserPlus, Zap, Check, RotateCcw, Shuffle, Search } from "lucide-react";
 import PlayerAvatar from "../../common/PlayerAvatar";
 import LiquidButton from "../../common/LiquidButton";
 import LiquidTabBar from "../../common/LiquidTabBar";
 import GlassModal from "../../common/GlassModal";
+import { WIN_TARGET_OPTIONS, normalizeWinTarget } from "../../../utils/scoringRules";
 
 
 // ── MEMOIZED COMPONENTS ──
+const DECK_ROW_HEIGHT = 72;
+const DECK_OVERSCAN = 8;
 
-const DraftPlayerItem = React.memo(({ p, onRemove }) => (
-    <motion.div layout initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="flex justify-between items-center px-3 py-2.5 rounded-xl relative overflow-hidden group"
+const UnifiedDeckRow = React.memo(({ playerName, isDrafted, onToggle }) => (
+    <div
+        className="neo-btn h-16 w-full px-3.5 rounded-2xl flex items-center gap-3 relative overflow-hidden"
         style={{
-            background: "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            backdropFilter: "blur(20px)",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 12px rgba(0,0,0,0.2)",
-        }}>
-        {/* Animated glowing border effect on hover */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(34,197,94,0.15), transparent)" }} />
-
-        {/* Neon left accent */}
-        <div className="absolute left-0 top-0 bottom-0 w-[3px]"
-            style={{ background: "linear-gradient(to bottom, #4ade80, #16a34a)", boxShadow: "0 0 12px rgba(74,222,128,0.6)" }} />
-
-        <div className="flex items-center gap-2 pl-2 relative z-10">
-            <PlayerAvatar name={p} className="w-7 h-7 text-[9px] ring-2 ring-white/15 shadow-lg" />
-            <span className="text-[11px] font-black uppercase tracking-tight text-white truncate max-w-[70px]" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>{p}</span>
-        </div>
-        <button onClick={() => onRemove(p)} style={{ color: "rgba(255,255,255,0.2)" }}
-            className="hover:text-red-400 transition-colors p-1">
-            <Trash2 size={13} />
-        </button>
-    </motion.div>
-));
-
-const BenchPlayerItem = React.memo(({ p, onAdd }) => (
-    <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.8, opacity: 0, transition: { duration: 0.15 } }}
-        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-        onClick={() => onAdd(p)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase overflow-hidden whitespace-nowrap cursor-pointer transition-all origin-left text-white/50"
-        style={{
-            background: "rgba(0,0,0,0.5)",
-            border: "1px solid rgba(255,255,255,0.05)",
-            boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)"
+            background: isDrafted
+                ? "linear-gradient(145deg, rgba(255,202,40,0.2), rgba(245,124,0,0.14) 55%, rgba(15,23,42,0.32))"
+                : "linear-gradient(145deg, rgba(148,163,184,0.14), rgba(30,41,59,0.34) 55%, rgba(15,23,42,0.4))",
+            border: isDrafted ? "1px solid rgba(255,202,40,0.3)" : "1px solid rgba(148,163,184,0.3)",
+            boxShadow: isDrafted
+                ? "0 12px 24px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px rgba(255,202,40,0.12)"
+                : "0 12px 24px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.14)"
         }}
     >
-        <PlayerAvatar name={p} className="w-5 h-5 text-[7px] opacity-60 shrink-0" />
-        <span>{p}</span>
-        <Plus size={10} className="opacity-40" />
-    </motion.div>
+        <div className="neo-gloss-sweep opacity-35" />
+        <PlayerAvatar
+            name={playerName}
+            className={`w-8 h-8 text-[9px] shrink-0 ${isDrafted ? "ring-2 ring-amber-300/50" : "ring-1 ring-slate-200/35"}`}
+        />
+        <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.11em] text-white truncate">{playerName}</p>
+            <p
+                className="text-[8px] font-black uppercase tracking-[0.14em] mt-0.5"
+                style={{ color: isDrafted ? "rgba(255,202,40,0.82)" : "rgba(148,163,184,0.86)" }}
+            >
+                {isDrafted ? "Drafted" : "Bench"}
+            </p>
+        </div>
+        <button
+            type="button"
+            onClick={() => onToggle(playerName, !isDrafted)}
+            className="neo-btn neo-btn-icon h-8 px-3 rounded-full text-[8px] font-black uppercase tracking-[0.14em] flex items-center gap-1.5 shrink-0"
+            style={isDrafted
+                ? {
+                    background: "rgba(2,6,23,0.52)",
+                    border: "1px solid rgba(255,202,40,0.3)",
+                    color: "rgba(255,232,173,0.9)"
+                }
+                : {
+                    background: "rgba(2,6,23,0.52)",
+                    border: "1px solid rgba(148,163,184,0.34)",
+                    color: "rgba(226,232,240,0.9)"
+                }
+            }
+        >
+            {isDrafted ? <RotateCcw size={10} /> : <Plus size={10} />}
+            {isDrafted ? "Bench" : "Draft"}
+        </button>
+    </div>
 ));
 
 export default function Setup({
@@ -72,6 +77,8 @@ export default function Setup({
     handleFormatSelection,
     matchFormat,
     setMatchFormat,
+    pointsToWin,
+    setPointsToWin,
     selectedPlayers,
     prepareAutoTournament,
     commitAutoTournament,
@@ -85,6 +92,11 @@ export default function Setup({
 
     // Toast Notification State
     const [toastMsg, setToastMsg] = useState(null);
+    const [playerSearch, setPlayerSearch] = useState("");
+    const [playerDeckTab, setPlayerDeckTab] = useState("all");
+    const [deckScrollTop, setDeckScrollTop] = useState(0);
+    const [deckViewportHeight, setDeckViewportHeight] = useState(420);
+    const deckViewportRef = React.useRef(null);
 
     // Auto-dismiss toast
     React.useEffect(() => {
@@ -94,6 +106,7 @@ export default function Setup({
     }, [toastMsg]);
 
     const draftPlayers = data.draftPlayers || [];
+    const selectedPointsToWin = normalizeWinTarget(pointsToWin ?? data?.pointsToWin);
     const prevDraftLengthRef = React.useRef(draftPlayers.length);
     const isManualModeEligible = matchFormat === "doubles" && draftPlayers.length >= 4 && draftPlayers.length % 2 === 0;
 
@@ -112,10 +125,54 @@ export default function Setup({
         }
     }, [isManualMode, isManualModeEligible, setIsManualMode]);
 
-    // Memoize these lists to prevent recalc on every render
+    React.useEffect(() => {
+        const container = deckViewportRef.current;
+        if (!container || typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver((entries) => {
+            const nextHeight = entries[0]?.contentRect?.height ?? 0;
+            if (nextHeight > 0) setDeckViewportHeight(nextHeight);
+        });
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
+
+    // Memoize player groups for deck filtering + virtualization
+    const draftedSet = React.useMemo(() => new Set(draftPlayers), [draftPlayers]);
+    const allPlayers = React.useMemo(() => {
+        const merged = new Set([...sortedRoster, ...draftPlayers]);
+        return Array.from(merged).sort((a, b) => a.localeCompare(b));
+    }, [sortedRoster, draftPlayers]);
     const benchedPlayers = React.useMemo(() =>
-        sortedRoster.filter(p => !draftPlayers.includes(p)),
-        [sortedRoster, draftPlayers]);
+        allPlayers.filter((player) => !draftedSet.has(player)),
+        [allPlayers, draftedSet]);
+
+    const searchQuery = playerSearch.trim().toLowerCase();
+    const hasRosterPlayers = allPlayers.length > 0;
+    const isSearchActive = searchQuery.length >= 2;
+    const deckBasePlayers = React.useMemo(() => {
+        if (playerDeckTab === "drafted") return allPlayers.filter((player) => draftedSet.has(player));
+        if (playerDeckTab === "bench") return benchedPlayers;
+        return allPlayers;
+    }, [allPlayers, benchedPlayers, draftedSet, playerDeckTab]);
+    const filteredDeckPlayers = React.useMemo(() => {
+        if (!isSearchActive) return deckBasePlayers;
+        return deckBasePlayers.filter((player) => player.toLowerCase().includes(searchQuery));
+    }, [deckBasePlayers, isSearchActive, searchQuery]);
+
+    const deckTotalRows = filteredDeckPlayers.length;
+    const deckVisibleCount = Math.ceil(deckViewportHeight / DECK_ROW_HEIGHT) + DECK_OVERSCAN * 2;
+    const deckStartIndex = Math.max(0, Math.floor(deckScrollTop / DECK_ROW_HEIGHT) - DECK_OVERSCAN);
+    const deckEndIndex = Math.min(deckTotalRows, deckStartIndex + deckVisibleCount);
+    const visibleDeckPlayers = React.useMemo(() =>
+        filteredDeckPlayers.slice(deckStartIndex, deckEndIndex),
+        [filteredDeckPlayers, deckStartIndex, deckEndIndex]);
+    const deckInnerHeight = deckTotalRows * DECK_ROW_HEIGHT;
+
+    const summaryCounts = React.useMemo(() => ({
+        total: allPlayers.length,
+        drafted: draftedSet.size,
+        bench: benchedPlayers.length
+    }), [allPlayers.length, draftedSet.size, benchedPlayers.length]);
 
     // Optimize callbacks
     const handleRemove = React.useCallback((p) => {
@@ -130,6 +187,35 @@ export default function Setup({
         setToastMsg({ type: 'add', text: `${p} drafted` });
     }, [toggleDraftPlayer, triggerHaptic]);
 
+    React.useEffect(() => {
+        setDeckScrollTop(0);
+        if (deckViewportRef.current) {
+            deckViewportRef.current.scrollTop = 0;
+        }
+    }, [playerDeckTab, searchQuery]);
+
+    React.useEffect(() => {
+        const maxScrollTop = Math.max(0, deckInnerHeight - deckViewportHeight);
+        if (deckScrollTop > maxScrollTop) {
+            setDeckScrollTop(maxScrollTop);
+            if (deckViewportRef.current) {
+                deckViewportRef.current.scrollTop = maxScrollTop;
+            }
+        }
+    }, [deckInnerHeight, deckViewportHeight, deckScrollTop]);
+
+    const handleDeckScroll = React.useCallback((event) => {
+        setDeckScrollTop(event.currentTarget.scrollTop);
+    }, []);
+
+    const handleDeckToggle = React.useCallback((playerName, shouldDraft) => {
+        if (shouldDraft) {
+            handleAdd(playerName);
+            return;
+        }
+        handleRemove(playerName);
+    }, [handleAdd, handleRemove]);
+
     const handleAutoDraft = async (fmt) => {
         try {
             const preview = await prepareAutoTournament(fmt);
@@ -140,6 +226,15 @@ export default function Setup({
             // Optionally show a toast or alert
         }
     };
+
+    const handlePointsToWinSelect = React.useCallback((target) => {
+        const nextTarget = normalizeWinTarget(target);
+        if (nextTarget === selectedPointsToWin) return;
+        triggerHaptic(30);
+        if (typeof setPointsToWin === "function") {
+            void setPointsToWin(nextTarget);
+        }
+    }, [selectedPointsToWin, setPointsToWin, triggerHaptic]);
 
     const confirmPreview = () => {
         if (!previewData) return;
@@ -174,10 +269,10 @@ export default function Setup({
         <div className="max-w-[1200px] mx-auto space-y-5 md:space-y-8 relative z-10 md:p-8">
             {!isManualMode ? (
                 <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                    className={benchedPlayers.length > 0 ? "md:grid md:grid-cols-12 md:gap-8 md:items-start space-y-6 md:space-y-0" : "max-w-2xl mx-auto space-y-6"}>
+                    className="md:grid md:grid-cols-12 md:gap-8 md:items-start space-y-6 md:space-y-0">
 
                     {/* LEFT COLUMN: Draft Input & Settings */}
-                    <div className={benchedPlayers.length > 0 ? "md:col-span-7 space-y-6 flex flex-col" : "space-y-6 flex flex-col"}>
+                    <div className="md:col-span-7 space-y-6 flex flex-col">
                         <div className="p-6 rounded-[2rem]" style={glassCard}>
                             <p className="text-[9px] font-black uppercase tracking-widest mb-4 flex items-center gap-2 leading-none" style={{ color: "rgba(255,202,40,0.7)" }}>
                                 <span>Draft Athletes</span>
@@ -200,23 +295,42 @@ export default function Setup({
                                         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent h-[200%] animate-[scan_4s_linear_infinite]" />
                                     </div>
                                 </div>
-                                <button type="submit" className="w-[52px] flex-shrink-0 flex items-center justify-center rounded-xl relative overflow-hidden group transition-transform active:scale-95"
-                                    style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,202,40,0.3)" }}>
+                                <button
+                                    type="submit"
+                                    className="neo-btn neo-btn-icon w-[52px] flex-shrink-0 flex items-center justify-center rounded-xl relative overflow-hidden group transition-transform active:scale-95"
+                                >
                                     <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-orange-600/20 group-hover:opacity-100 opacity-60 transition-opacity" />
+                                    <div className="neo-gloss-sweep opacity-80" />
                                     <Plus size={20} className="relative z-10 text-amber-400 group-hover:scale-110 transition-transform drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
                                 </button>
                             </form>
 
-                            {draftPlayers.length > 0 ? (
-                                <div className="grid grid-cols-2 gap-2 max-h-[240px] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-                                    <AnimatePresence initial={false} mode="popLayout">
-                                        {draftPlayers.map((p) => (
-                                            <DraftPlayerItem key={p} p={p} onRemove={handleRemove} />
-                                        ))}
-                                    </AnimatePresence>
-                                </div>
-                            ) : (
-                                <div className="py-8 text-center rounded-xl flex flex-col items-center gap-2"
+                            <div className="grid grid-cols-3 gap-2">
+                                {[
+                                    { label: "Total", value: summaryCounts.total, tone: "rgba(148,163,184,0.85)" },
+                                    { label: "Drafted", value: summaryCounts.drafted, tone: "rgba(255,202,40,0.9)" },
+                                    { label: "Bench", value: summaryCounts.bench, tone: "rgba(148,163,184,0.85)" },
+                                ].map((item) => (
+                                    <div
+                                        key={item.label}
+                                        className="rounded-xl px-2.5 py-3 text-center"
+                                        style={{
+                                            background: "linear-gradient(145deg, rgba(2,6,23,0.52), rgba(15,23,42,0.34))",
+                                            border: "1px solid rgba(255,255,255,0.08)",
+                                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)"
+                                        }}
+                                    >
+                                        <p className="text-[8px] font-black uppercase tracking-[0.14em]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                                            {item.label}
+                                        </p>
+                                        <p className="text-lg font-black tabular-nums mt-0.5" style={{ color: item.tone }}>
+                                            {item.value}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                            {!hasRosterPlayers && (
+                                <div className="mt-3 py-6 text-center rounded-xl flex flex-col items-center gap-2"
                                     style={{ border: "1px dashed rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.15)" }}>
                                     <UserPlus size={20} style={{ color: "rgba(255,255,255,0.12)" }} />
                                     <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.15)" }}>
@@ -225,6 +339,72 @@ export default function Setup({
                                 </div>
                             )}
                         </div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="p-5 rounded-[1.7rem] relative overflow-hidden"
+                            style={{
+                                background: "linear-gradient(135deg, rgba(251,191,36,0.18), rgba(245,124,0,0.09) 45%, rgba(255,255,255,0.03))",
+                                border: "1px solid rgba(255,202,40,0.25)",
+                                boxShadow: "0 16px 36px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 26px rgba(255,202,40,0.12)",
+                                backdropFilter: "blur(26px)"
+                            }}
+                        >
+                            <div className="absolute inset-0 pointer-events-none opacity-70">
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(255,202,40,0.28),transparent_45%)]" />
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_90%_100%,rgba(245,124,0,0.22),transparent_50%)]" />
+                            </div>
+
+                            <div className="relative z-10 flex items-center justify-between mb-4">
+                                <p className="text-[9px] font-black uppercase tracking-[0.22em]" style={{ color: "rgba(255,202,40,0.9)" }}>
+                                    Game Points
+                                </p>
+                                <span
+                                    className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.18em]"
+                                    style={{
+                                        color: "rgba(255,202,40,0.95)",
+                                        border: "1px solid rgba(255,202,40,0.35)",
+                                        background: "rgba(245,124,0,0.18)"
+                                    }}
+                                >
+                                    To {selectedPointsToWin}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                                {WIN_TARGET_OPTIONS.map((target) => {
+                                    const isActive = selectedPointsToWin === target;
+                                    return (
+                                        <motion.button
+                                            key={target}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => handlePointsToWinSelect(target)}
+                                            className="neo-btn rounded-2xl px-2 py-3 text-center relative overflow-hidden"
+                                            style={isActive
+                                                ? {
+                                                    border: "1px solid rgba(255,202,40,0.6)",
+                                                    background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                                    boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                                    color: "#fff8e1"
+                                                }
+                                                : {
+                                                    border: "1px solid rgba(255,202,40,0.16)",
+                                                    background: "rgba(2,6,23,0.5)",
+                                                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+                                                    color: "rgba(255,255,255,0.48)"
+                                                }
+                                            }
+                                        >
+                                            {isActive && (
+                                                <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-white/20 to-transparent animate-[shimmer_2.4s_infinite]" />
+                                            )}
+                                            <span className="relative z-10 text-lg font-black tabular-nums tracking-tight">{target}</span>
+                                        </motion.button>
+                                    );
+                                })}
+                            </div>
+                        </motion.div>
 
                         {/* Format Selection (Inside Left Column): 2+ players (singles 2→ grand final; 4+ for round robin / manual) */}
                         {draftPlayers.length >= 2 && (
@@ -241,24 +421,55 @@ export default function Setup({
                                             { id: "doubles", label: "Doubles" }
                                         ]}
                                         activeTab={matchFormat} onChange={setMatchFormat}
-                                        containerStyle={{ background: "rgba(255,255,255,0.03)", backdropFilter: "none", padding: "4px" }}
-                                        activeTabStyle={{ background: "rgba(255,255,255,0.1)" }}
-                                        inactiveTabStyle={{ color: "rgba(255,255,255,0.4)" }}
+                                        containerStyle={{
+                                            background: "rgba(255,255,255,0.03)",
+                                            backdropFilter: "none",
+                                            padding: "4px",
+                                            border: "1px solid rgba(255,202,40,0.16)"
+                                        }}
+                                        activeTabStyle={{
+                                            background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                            border: "1px solid rgba(255,202,40,0.62)",
+                                            boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                            color: "#fff8e1"
+                                        }}
+                                        inactiveTabStyle={{ color: "rgba(255,255,255,0.56)" }}
                                     />
                                 </div>
                                 <div className="flex gap-3">
                                     <LiquidButton
                                         onClick={() => handleAutoDraft(matchFormat)}
                                         variant="primary"
+                                        glossy
                                         className="flex-1"
-                                        style={{ borderRadius: "1rem", padding: "1rem" }}
+                                        style={{
+                                            borderRadius: "1rem",
+                                            padding: "1rem",
+                                            background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                            border: "1px solid rgba(255,202,40,0.62)",
+                                            boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                            color: "#fff8e1",
+                                        }}
                                         disabled={matchFormat === "doubles" && draftPlayers.length < 4}
                                     >
                                         <Zap size={16} fill="currentColor" />
                                         <span className="ml-1.5 font-bold">Auto Draft</span>
                                     </LiquidButton>
                                     {isManualModeEligible && (
-                                        <LiquidButton onClick={() => setIsManualMode(true)} variant="secondary" className="flex-1" style={{ borderRadius: "1rem", padding: "1rem" }}>
+                                        <LiquidButton
+                                            onClick={() => setIsManualMode(true)}
+                                            variant="secondary"
+                                            glossy
+                                            className="flex-1"
+                                            style={{
+                                                borderRadius: "1rem",
+                                                padding: "1rem",
+                                                background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                                border: "1px solid rgba(255,202,40,0.62)",
+                                                boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                                color: "#fff8e1",
+                                            }}
+                                        >
                                             <UsersRound size={16} /> <span className="ml-1.5 font-bold">Manual Teams</span>
                                         </LiquidButton>
                                     )}
@@ -272,50 +483,200 @@ export default function Setup({
                         )}
                     </div>
 
-                    {/* RIGHT COLUMN: The Bench */}
-                    {benchedPlayers.length > 0 && (
-                        <div className="md:col-span-5 md:sticky md:top-[120px]">
-                            <div className="p-5 rounded-[2rem] relative overflow-hidden"
-                                style={{
-                                    background: "rgba(0,0,0,0.2)", // cleaner tray
-                                    border: "1px solid rgba(255,255,255,0.03)",
-                                    boxShadow: "inset 0 10px 30px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.02)"
-                                }}>
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.03),transparent_70%)] pointer-events-none" />
-                                <p className="text-[9px] font-black uppercase tracking-widest mb-3 flex items-center gap-1.5 leading-none" style={{ color: "rgba(255,255,255,0.25)" }}>
-                                    <UsersRound size={11} /> The Bench — Tap to Draft
-                                    <span className="ml-auto px-2 py-[2px] rounded-full text-[8px] font-black leading-none" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.3)" }}>
-                                        {benchedPlayers.length}
-                                    </span>
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    <AnimatePresence initial={false} mode="popLayout">
-                                        {benchedPlayers.map((p) => (
-                                            <BenchPlayerItem key={p} p={p} onAdd={handleAdd} />
-                                        ))}
-                                    </AnimatePresence>
+                    {/* RIGHT COLUMN: Unified Player Command Deck */}
+                    <div className="md:col-span-5 md:sticky md:top-[120px]">
+                        <div
+                            className="p-5 rounded-[2rem] relative overflow-hidden h-[520px] md:h-[560px] flex flex-col"
+                            style={{
+                                background: "linear-gradient(150deg, rgba(148,163,184,0.14), rgba(30,41,59,0.4) 48%, rgba(2,6,23,0.58))",
+                                border: "1px solid rgba(148,163,184,0.3)",
+                                boxShadow: "0 20px 42px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.12)",
+                                backdropFilter: "blur(24px)"
+                            }}
+                        >
+                            <div className="absolute inset-0 pointer-events-none">
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(148,163,184,0.28),transparent_46%)]" />
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(56,189,248,0.16),transparent_48%)]" />
+                            </div>
+
+                            <p className="text-[9px] font-black uppercase tracking-[0.2em] mb-3.5 flex items-center gap-1.5 leading-none" style={{ color: "rgba(241,245,249,0.9)" }}>
+                                <UsersRound size={11} /> Player Command Deck
+                                <span className="ml-auto px-2 py-[2px] rounded-full text-[8px] font-black leading-none" style={{ background: "rgba(15,23,42,0.55)", color: "rgba(226,232,240,0.95)", border: "1px solid rgba(148,163,184,0.28)" }}>
+                                    {summaryCounts.total}
+                                </span>
+                            </p>
+                            <p className="text-[8px] font-black uppercase tracking-[0.16em] mb-3" style={{ color: "rgba(203,213,225,0.6)" }}>
+                                Unified Draft And Bench Controls
+                            </p>
+
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                                {[
+                                    { id: "all", label: "All", count: summaryCounts.total },
+                                    { id: "drafted", label: "Drafted", count: summaryCounts.drafted },
+                                    { id: "bench", label: "Bench", count: summaryCounts.bench },
+                                ].map((tab) => {
+                                    const isActive = playerDeckTab === tab.id;
+                                    return (
+                                        <button
+                                            key={tab.id}
+                                            type="button"
+                                            onClick={() => {
+                                                if (playerDeckTab === tab.id) return;
+                                                triggerHaptic(20);
+                                                setPlayerDeckTab(tab.id);
+                                            }}
+                                            className="neo-btn rounded-xl py-2 px-1.5 text-center"
+                                            style={isActive
+                                                ? {
+                                                    background: "linear-gradient(145deg, rgba(255,202,40,0.36), rgba(245,124,0,0.32))",
+                                                    border: "1px solid rgba(255,202,40,0.58)",
+                                                    color: "#fff8e1",
+                                                    boxShadow: "0 0 20px rgba(255,202,40,0.22), inset 0 1px 0 rgba(255,255,255,0.2)"
+                                                }
+                                                : {
+                                                    background: "rgba(2,6,23,0.5)",
+                                                    border: "1px solid rgba(148,163,184,0.26)",
+                                                    color: "rgba(226,232,240,0.72)",
+                                                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)"
+                                                }
+                                            }
+                                        >
+                                            <p className="text-[8px] font-black uppercase tracking-[0.12em]">{tab.label}</p>
+                                            <p className="text-[11px] font-black tabular-nums mt-0.5">{tab.count}</p>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="mb-3 relative">
+                                <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300/50 pointer-events-none" />
+                                <input
+                                    value={playerSearch}
+                                    onChange={(event) => setPlayerSearch(event.target.value)}
+                                    placeholder="Search players..."
+                                    className="w-full rounded-xl pl-9 pr-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white placeholder-white/35 bg-transparent outline-none"
+                                    style={{ border: "1px solid rgba(148,163,184,0.28)", background: "rgba(2,6,23,0.42)" }}
+                                />
+                            </div>
+
+                            <div className="h-4 mb-2 flex items-center justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-[0.13em]" style={{ color: "rgba(148,163,184,0.72)" }}>
+                                    {playerSearch.length > 0 && playerSearch.length < 2 ? "Type 2+ letters to filter" : "\u00A0"}
+                                </span>
+                                <span className="text-[8px] font-black uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.58)" }}>
+                                    {deckTotalRows}/{deckBasePlayers.length}
+                                </span>
+                            </div>
+
+                            <div
+                                className="relative flex-1 min-h-0 rounded-[1.25rem] border border-slate-300/15 bg-slate-950/35 overflow-hidden"
+                                style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -20px 28px rgba(2,6,23,0.24)" }}
+                            >
+                                <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(15,23,42,0.28), rgba(2,6,23,0.58))" }} />
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 z-10" style={{ background: "linear-gradient(to top, rgba(2,6,23,0.9), rgba(2,6,23,0.22), transparent)" }} />
+
+                                <div
+                                    ref={deckViewportRef}
+                                    onScroll={handleDeckScroll}
+                                    className="relative z-[1] h-full min-h-0 overflow-y-auto p-2 pb-6 scrollbar-hide"
+                                    style={{
+                                        scrollbarWidth: "none",
+                                        WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 44px), rgba(0,0,0,0) 100%)",
+                                        maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 44px), rgba(0,0,0,0) 100%)"
+                                    }}
+                                >
+                                    {!hasRosterPlayers ? (
+                                        <div className="rounded-2xl px-4 py-7 text-center" style={{ background: "rgba(15,23,42,0.45)", border: "1px dashed rgba(148,163,184,0.28)" }}>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: "rgba(226,232,240,0.78)" }}>
+                                                No Players To Draft
+                                            </p>
+                                            <p className="text-[9px] font-bold mt-1" style={{ color: "rgba(148,163,184,0.78)" }}>
+                                                Add players to the roster to start drafting.
+                                            </p>
+                                        </div>
+                                    ) : playerDeckTab === "bench" && !isSearchActive && summaryCounts.bench === 0 ? (
+                                        <div className="rounded-2xl px-4 py-7 text-center" style={{ background: "rgba(15,23,42,0.45)", border: "1px dashed rgba(148,163,184,0.28)" }}>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: "rgba(226,232,240,0.78)" }}>
+                                                All Players Drafted
+                                            </p>
+                                            <p className="text-[9px] font-bold mt-1" style={{ color: "rgba(148,163,184,0.78)" }}>
+                                                Everyone is currently in draft.
+                                            </p>
+                                        </div>
+                                    ) : playerDeckTab === "drafted" && !isSearchActive && summaryCounts.drafted === 0 ? (
+                                        <div className="rounded-2xl px-4 py-7 text-center" style={{ background: "rgba(15,23,42,0.45)", border: "1px dashed rgba(148,163,184,0.28)" }}>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: "rgba(226,232,240,0.78)" }}>
+                                                Draft Queue Empty
+                                            </p>
+                                            <p className="text-[9px] font-bold mt-1" style={{ color: "rgba(148,163,184,0.78)" }}>
+                                                Move players from Bench into Draft.
+                                            </p>
+                                        </div>
+                                    ) : deckTotalRows === 0 ? (
+                                        <div className="rounded-2xl px-4 py-7 text-center" style={{ background: "rgba(15,23,42,0.45)", border: "1px dashed rgba(148,163,184,0.28)" }}>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: "rgba(226,232,240,0.78)" }}>
+                                                No Players
+                                            </p>
+                                            <p className="text-[9px] font-bold mt-1" style={{ color: "rgba(148,163,184,0.78)" }}>
+                                                No players match this search.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div style={{ height: deckInnerHeight, position: "relative" }}>
+                                            {visibleDeckPlayers.map((playerName, listIndex) => {
+                                                const absoluteIndex = deckStartIndex + listIndex;
+                                                const isDrafted = draftedSet.has(playerName);
+                                                return (
+                                                    <div
+                                                        key={playerName}
+                                                        style={{
+                                                            position: "absolute",
+                                                            top: absoluteIndex * DECK_ROW_HEIGHT,
+                                                            left: 0,
+                                                            right: 0,
+                                                            height: DECK_ROW_HEIGHT,
+                                                            paddingBottom: 8
+                                                        }}
+                                                    >
+                                                        <UnifiedDeckRow
+                                                            playerName={playerName}
+                                                            isDrafted={isDrafted}
+                                                            onToggle={handleDeckToggle}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </div>
                 </motion.div>
             ) : (
                 <motion.div initial={{ x: 30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-5">
                     <div className="flex justify-between items-center">
                         <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.3)" }}>Manual Team Selection</p>
-                        <button onClick={() => setIsManualMode(false)} className="text-[10px] font-black uppercase tracking-widest" style={{ color: "rgba(255,202,40,0.8)" }}>
+                        <button
+                            onClick={() => setIsManualMode(false)}
+                            className="neo-btn neo-btn-subtle text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl"
+                            style={{ color: "rgba(255,202,40,0.9)" }}
+                        >
                             ← Cancel
                         </button>
                     </div>
 
                     <div className="md:grid md:grid-cols-12 md:gap-8 md:items-start space-y-5 md:space-y-0">
                         {/* LEFT COLUMN: Available Players */}
-                        <div className="md:col-span-6 space-y-3">
+                        <div className="md:col-span-6 space-y-3 min-h-0">
                             <p className="text-[9px] font-black uppercase tracking-widest pl-2" style={{ color: "rgba(255,255,255,0.25)" }}>Available Athletes</p>
-                            <div className="grid grid-cols-2 gap-3 mb-20 lg:mb-0">
-                                {availablePlayersForManual.map((p) => (
+                            <div
+                                className="grid grid-cols-2 gap-3 max-h-[46vh] md:max-h-none overflow-y-auto md:overflow-visible pr-1 pb-1"
+                                style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+                            >
+                                {availablePlayersForManual.length > 0 ? availablePlayersForManual.map((p) => (
                                     <motion.button whileTap={{ scale: 0.93 }} key={p} onClick={() => handleManualSelect(p)}
-                                        className="flex items-center gap-2 pl-2 pr-4 py-2 rounded-full font-black text-[11px] uppercase transition-all relative overflow-hidden group"
+                                        className="neo-btn flex items-center gap-2 pl-2 pr-4 py-2 rounded-full font-black text-[11px] uppercase transition-all relative overflow-hidden group"
                                         style={selectedPlayers.includes(p)
                                             ? { background: "linear-gradient(135deg, rgba(255,202,40,0.15), rgba(245,124,0,0.15))", border: "1px solid rgba(255,202,40,0.5)", color: "#FFCA28", boxShadow: "0 0 20px rgba(255,202,40,0.2), inset 0 0 10px rgba(255,202,40,0.1)" }
                                             : { background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)" }
@@ -324,7 +685,16 @@ export default function Setup({
                                         <PlayerAvatar name={p} className={`relative z-10 w-8 h-8 text-[10px] ${selectedPlayers.includes(p) ? "ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]" : "opacity-60 group-hover:opacity-100 transition-opacity"}`} />
                                         <span className="relative z-10">{p}</span>
                                     </motion.button>
-                                ))}
+                                )) : (
+                                    <div
+                                        className="col-span-2 rounded-2xl px-4 py-5 text-center"
+                                        style={{ background: "rgba(15,23,42,0.45)", border: "1px dashed rgba(148,163,184,0.24)" }}
+                                    >
+                                        <p className="text-[9px] font-black uppercase tracking-[0.14em]" style={{ color: "rgba(226,232,240,0.72)" }}>
+                                            No Athletes Available
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -368,7 +738,7 @@ export default function Setup({
                                         )}
                                     </div>
                                     {selectedPlayers.length > 0 && (
-                                        <motion.button whileTap={{ scale: 0.9 }} onClick={handleManualUndo} className="h-14 w-14 rounded-2xl flex items-center justify-center"
+                                        <motion.button whileTap={{ scale: 0.9 }} onClick={handleManualUndo} className="neo-btn neo-btn-danger neo-btn-icon h-14 w-14 rounded-2xl flex items-center justify-center"
                                             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)", color: "rgba(239,68,68,0.6)", boxShadow: "0 0 12px rgba(239,68,68,0.08)" }}>
                                             <RotateCcw size={18} />
                                         </motion.button>
@@ -383,9 +753,20 @@ export default function Setup({
                                         <span className="px-2 py-[2px] rounded-full text-[8px] font-black leading-none" style={{ background: "rgba(34,197,94,0.1)", color: "rgba(34,197,94,0.7)" }}>{manualTeams.length}</span>
                                     </h3>
                                     <div className="space-y-2">
-                                        <AnimatePresence initial={false}>
+                                        <AnimatePresence initial={false} mode="popLayout">
                                             {manualTeams.map((t, i) => (
-                                                <motion.div key={i} layout initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                                                <motion.div
+                                                    key={i}
+                                                    layout
+                                                    initial={{ y: 10, scale: 0.98, opacity: 0 }}
+                                                    animate={{ y: 0, scale: 1, opacity: 1 }}
+                                                    exit={{ y: -8, scale: 0.97, opacity: 0 }}
+                                                    transition={{
+                                                        layout: { type: "spring", stiffness: 400, damping: 32, mass: 0.7 },
+                                                        y: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
+                                                        opacity: { duration: 0.16, ease: "easeOut" },
+                                                        scale: { duration: 0.16, ease: "easeOut" }
+                                                    }}
                                                     className="flex items-center justify-between p-3 rounded-xl relative overflow-hidden"
                                                     style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)" }}>
                                                     <div className="flex items-center gap-3">
@@ -403,7 +784,10 @@ export default function Setup({
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <button onClick={() => removeManualTeam(i)} className="p-2 text-white/20 hover:text-red-400 transition-colors">
+                                                    <button
+                                                        onClick={() => removeManualTeam(i)}
+                                                        className="neo-btn neo-btn-danger neo-btn-icon p-2 text-white/75 hover:text-red-100 transition-colors"
+                                                    >
                                                         <Trash2 size={14} />
                                                     </button>
                                                 </motion.div>
@@ -461,14 +845,16 @@ export default function Setup({
                     ) : null
                 }
                 actions={
-                    <div className="flex gap-2 w-full pt-1">
-                        <button onClick={() => handleAutoDraft(matchFormat)}
-                            className="w-14 shrink-0 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/5 transition-colors group"
+                    <div className="grid grid-cols-[54px_minmax(0,1fr)] gap-2 w-full">
+                        <LiquidButton
+                            onClick={() => handleAutoDraft(matchFormat)}
+                            variant="ghost"
+                            style={{ borderRadius: "1rem", padding: "0.95rem 0", minWidth: 0 }}
                             title="Regenerate Teams"
                         >
-                            <Shuffle size={18} className="group-hover:rotate-180 transition-transform duration-500" />
-                        </button>
-                        <LiquidButton onClick={confirmPreview} variant="primary" style={{ flex: 1, borderRadius: "1rem", padding: "1.1rem", fontSize: "0.9rem" }}>
+                            <Shuffle size={16} />
+                        </LiquidButton>
+                        <LiquidButton onClick={confirmPreview} variant="primary" style={{ borderRadius: "1rem", padding: "1.1rem", fontSize: "0.9rem" }}>
                             <span className="font-black">Start Event</span>
                         </LiquidButton>
                     </div>

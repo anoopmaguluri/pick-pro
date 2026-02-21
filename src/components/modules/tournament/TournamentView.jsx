@@ -16,6 +16,7 @@ import MatchList from "../matches/MatchList";
 import StandingsTable from "../standings/StandingsTable";
 import LiquidButton from "../../common/LiquidButton";
 import LiquidTabBar from "../../common/LiquidTabBar";
+import GlassHeader from "../../common/GlassHeader";
 
 // ─── Confetti Particle ────────────────────────────────────────────────────────
 const CONFETTI_COLORS = ["#FFCA28", "#F57C00", "#4ADE80", "#818CF8", "#F472B6", "#38BDF8"];
@@ -71,6 +72,8 @@ export default function TournamentView({
     // Format
     matchFormat,
     setMatchFormat,
+    pointsToWin,
+    setPointsToWin,
     // Setup props
     newPlayer,
     setNewPlayer,
@@ -105,8 +108,13 @@ export default function TournamentView({
     const mainScrollRef = React.useRef(null);
     const tabScrollRef = React.useRef({ matches: 0, standings: 0 });
     const previousTabRef = React.useRef("matches");
+    const viewHeaderRef = React.useRef(null);
+    const [viewHeaderHeight, setViewHeaderHeight] = useState(0);
 
     const isSetupMode = !data || data.status === "draft";
+    const isStandingsTabActive = !isSetupMode && activeTab === "standings";
+    const standingsStickyTop = Math.max(88, viewHeaderHeight + 10);
+    const tournamentTitle = String(data?.name || "Tournament").trim() || "Tournament";
 
     // Derive the qualifier count for standings display
     const qCount = useMemo(() => qualifyCount(standings.length), [standings.length]);
@@ -154,6 +162,19 @@ export default function TournamentView({
         previousTabRef.current = activeTab;
     }, [activeTab]);
 
+    React.useLayoutEffect(() => {
+        const element = viewHeaderRef.current;
+        if (!element) return undefined;
+
+        const syncHeight = () => {
+            setViewHeaderHeight(element.getBoundingClientRect().height);
+        };
+
+        syncHeight();
+        const observer = new ResizeObserver(syncHeight);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [isSetupMode, isAdmin, data?.name]);
 
 
     return (
@@ -223,8 +244,8 @@ export default function TournamentView({
                             whileTap={{ scale: 0.92 }}
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }}
                             onClick={() => { triggerHaptic([30, 30, 80]); setDismissCelebration(true); }}
-                            className="px-10 py-4 rounded-full font-black uppercase text-[10px] tracking-widest z-10 relative"
-                            style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(20px)" }}
+                            className="neo-btn px-10 py-4 rounded-full font-black uppercase text-[10px] tracking-widest z-10 relative"
+                            style={{ backdropFilter: "blur(20px)" }}
                         >
                             <Sparkles size={12} className="inline mr-2" />
                             View Final Board
@@ -234,39 +255,63 @@ export default function TournamentView({
             </AnimatePresence>
 
             {/* HEADER */}
-            <header className="fixed top-0 inset-x-0 z-50 px-5 py-4 flex justify-between items-center"
-                style={{
-                    background: "rgba(3,7,18,0.7)",
-                    backdropFilter: "blur(20px) saturate(180%)",
-                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                    borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    boxShadow: "0 4px 30px rgba(0,0,0,0.5)"
-                }}>
-                <motion.button whileTap={{ scale: 0.88 }}
-                    onClick={() => { triggerHaptic(50); setActiveTournamentId(null); }}
-                    className="w-10 h-10 rounded-2xl flex items-center justify-center"
-                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                    <ChevronLeft size={20} />
-                </motion.button>
+            <GlassHeader headerRef={viewHeaderRef}>
+                <header className="px-5 py-4 flex justify-between items-center gap-3">
+                    <motion.button whileTap={{ scale: 0.88 }}
+                        onClick={() => { triggerHaptic(50); setActiveTournamentId(null); }}
+                        className="neo-btn neo-btn-subtle neo-btn-icon w-10 h-10 rounded-2xl flex items-center justify-center shrink-0">
+                        <ChevronLeft size={20} />
+                    </motion.button>
 
-                <div className="flex flex-col items-center">
-                    <h1 className="text-sm font-black italic tracking-tight uppercase text-white">{data?.name || "Tournament"}</h1>
-                    <span className="text-[8px] font-bold uppercase tracking-widest mt-0.5"
-                        style={{ color: isSetupMode ? "rgba(255,255,255,0.3)" : "rgba(255,202,40,0.7)" }}>
-                        {isSetupMode ? "Setup Mode" : isTournamentOver ? "🏁 Event Completed" : "⚡ Live Event"}
-                    </span>
-                </div>
+                    <div
+                        className="flex-1 min-w-0 flex flex-col items-center px-3 py-1.5 rounded-2xl"
+                        style={{
+                            background: "linear-gradient(145deg, rgba(15,23,42,0.64), rgba(2,6,23,0.72))",
+                            border: "1px solid rgba(120,132,156,0.22)",
+                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+                        }}
+                    >
+                        <h1
+                            className="max-w-full w-full text-sm font-black italic tracking-tight uppercase text-white text-center leading-[1.06] px-1"
+                            style={{
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                wordBreak: "break-word",
+                            }}
+                        >
+                            {tournamentTitle}
+                        </h1>
+                        <span
+                            className="mt-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-[0.14em]"
+                            style={{
+                                color: isSetupMode ? "rgba(226,232,240,0.75)" : "rgba(254,243,199,0.94)",
+                                background: isSetupMode ? "rgba(30,41,59,0.7)" : "rgba(255,202,40,0.14)",
+                                border: isSetupMode ? "1px solid rgba(120,132,156,0.28)" : "1px solid rgba(255,202,40,0.34)",
+                            }}
+                        >
+                            {isSetupMode ? "Setup Mode" : isTournamentOver ? "Event Completed" : "Live Event"}
+                        </span>
+                    </div>
 
-                <motion.button whileTap={{ scale: 0.88 }}
-                    onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }}
-                    className="w-10 h-10 rounded-2xl flex items-center justify-center"
-                    style={isAdmin
-                        ? { background: "linear-gradient(135deg, #F57C00, #FFCA28)", boxShadow: "0 0 20px rgba(245,124,0,0.5)", color: "#030712" }
-                        : { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }
-                    }>
-                    {isAdmin ? <Unlock size={16} /> : <Lock size={16} />}
-                </motion.button>
-            </header>
+                    <motion.button whileTap={{ scale: 0.88 }}
+                        onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }}
+                        className={`neo-btn neo-btn-icon w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${isAdmin ? "" : "neo-btn-subtle"}`}
+                        style={isAdmin
+                            ? {
+                                background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                border: "1px solid rgba(255,202,40,0.62)",
+                                boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                color: "#fff8e1"
+                            }
+                            : { color: "rgba(255,255,255,0.65)" }
+                        }>
+                        {isAdmin ? <Unlock size={16} /> : <Lock size={16} />}
+                    </motion.button>
+                </header>
+            </GlassHeader>
 
             {/* MAIN SCROLL */}
             <main
@@ -274,9 +319,14 @@ export default function TournamentView({
                 onScroll={(event) => {
                     tabScrollRef.current[activeTab] = event.currentTarget.scrollTop;
                 }}
-                className="flex-1 min-h-0 overflow-y-auto overscroll-contain relative z-10 pt-[72px]"
-                style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", scrollbarWidth: "none" }}>
-                <div className="p-5 pb-36">
+                className={`flex-1 min-h-0 relative z-10 ${isStandingsTabActive ? "overflow-hidden" : "overflow-y-auto"}`}
+                style={{
+                    paddingTop: `${Math.max(0, viewHeaderHeight) + 10}px`,
+                    WebkitOverflowScrolling: "touch",
+                    touchAction: "pan-y",
+                    scrollbarWidth: "none"
+                }}>
+                <div className={`p-5 ${isStandingsTabActive ? "pb-28 h-full min-h-0" : "pb-36"}`}>
                     {isSetupMode ? (
                         <Setup
                             data={data}
@@ -293,13 +343,15 @@ export default function TournamentView({
                             handleFormatSelection={handleFormatSelection}
                             matchFormat={matchFormat}
                             setMatchFormat={setMatchFormat}
+                            pointsToWin={pointsToWin}
+                            setPointsToWin={setPointsToWin}
                             selectedPlayers={selectedPlayers}
                             prepareAutoTournament={prepareAutoTournament}
                             commitAutoTournament={commitAutoTournament}
                             removeManualTeam={removeManualTeam}
                         />
                     ) : (
-                        <div className="pb-6">
+                        <div className={isStandingsTabActive ? "h-full min-h-0" : "pb-6"}>
                             {/* 
                                 Mobile (default): Show only the active tab.
                                 Tablet/Desktop (md:): Show both side-by-side in a responsive grid.
@@ -318,20 +370,25 @@ export default function TournamentView({
                                                 matches={data.matches} knockouts={data.knockouts}
                                                 isAdmin={isAdmin} adjustScore={adjustScore}
                                                 confirmMatch={confirmMatch} confirmKnockout={confirmKnockout}
+                                                pointsToWin={pointsToWin}
                                             />
                                         </motion.div>
                                     </AnimatePresence>
                                 </div>
 
                                 {/* Standings Column: hidden on mobile if not active, shows on md+ taking 5 cols */}
-                                <div className={`${activeTab === "standings" ? "block" : "hidden"} md:block md:col-span-5`}>
+                                <div className={`${activeTab === "standings" ? "block" : "hidden"} md:block md:col-span-5 ${isStandingsTabActive ? "h-full min-h-0" : ""}`}>
                                     <AnimatePresence mode="wait">
                                         <motion.div
                                             key="standings"
                                             initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
                                             transition={{ duration: 0.2, ease: "easeOut" }}
+                                            className={isStandingsTabActive ? "h-full min-h-0" : ""}
                                         >
-                                            <div className="md:sticky md:top-[88px]">
+                                            <div
+                                                className={`md:sticky ${isStandingsTabActive ? "h-full min-h-0" : ""}`}
+                                                style={{ top: `${standingsStickyTop}px` }}
+                                            >
                                                 <StandingsTable
                                                     standings={standings} isAdmin={isAdmin}
                                                     isKnockoutReady={allMatchesDone}
@@ -339,6 +396,7 @@ export default function TournamentView({
                                                     isKnockoutStarted={data.knockouts?.length > 0}
                                                     qualifyCount={qCount}
                                                     isTournamentOver={isTournamentOver}
+                                                    enableInternalScroll={isStandingsTabActive}
                                                 />
                                             </div>
                                         </motion.div>

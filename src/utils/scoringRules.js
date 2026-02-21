@@ -2,13 +2,21 @@
  * Pickleball match state calculator.
  *
  * Rules:
- *  - First to 11 points wins, must win by 2
- *  - Deuce at 10-10, then Advantage, then winner on next point
- *  - Game Point shown when one team is at 10, other is below 10
+ *  - First to target points wins, must win by 2
+ *  - Deuce at (target-1)-(target-1), then Advantage, then winner on next point
+ *  - Game Point shown when one team is at (target-1), other is below (target-1)
  */
 
-export function getMatchState(sA, sB) {
-    const WIN_TARGET = 11;
+export const WIN_TARGET_OPTIONS = [11, 15, 21];
+export const DEFAULT_WIN_TARGET = 11;
+
+export function normalizeWinTarget(winTarget) {
+    const parsed = parseInt(winTarget, 10);
+    return WIN_TARGET_OPTIONS.includes(parsed) ? parsed : DEFAULT_WIN_TARGET;
+}
+
+export function getMatchState(sA, sB, winTarget = DEFAULT_WIN_TARGET) {
+    const WIN_TARGET = normalizeWinTarget(winTarget);
     // Coerce to integers — guard against undefined/null from Firebase on fresh matches
     const a = parseInt(sA, 10) || 0;
     const b = parseInt(sB, 10) || 0;

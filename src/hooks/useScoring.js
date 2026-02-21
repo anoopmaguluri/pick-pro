@@ -8,11 +8,13 @@ import {
     confirmMatchCompleted,
     setKnockoutMatch,
     updateLeaderboardMarkerOnly,
+    clearLeaderboardMarker,
     applyRtdbLeaderboardUpdates
 } from "../services/db";
 import { useHaptic } from "./useHaptic";
 import { getKnockoutAdvancement } from "../utils/gameLogic";
 import { buildLeaderboardDeltasFromMatch, playerKeyForName } from "../utils/leaderboard";
+import { getMatchState } from "../utils/scoringRules";
 
 const SCORE_SOURCE_STORAGE_KEY = "pick-pro:score-source-id";
 const PENDING_SCORE_EVENTS_KEY = "pending-score-events-v1";
@@ -26,6 +28,22 @@ const pendingEventsStore = localforage.createInstance({
 
 const buildSourceId = () => `scorer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 const buildClientEventId = (sourceId) => `${sourceId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const scoreKeyForEvent = (isKnockout, mIdx, team) => `${isKnockout ? "k" : "m"}-${mIdx}-${team}`;
+const parseScoreKey = (key) => {
+    const match = /^([mk])-(\d+)-([AB])$/.exec(String(key || ""));
+    if (!match) return null;
+    return {
+        isKnockout: match[1] === "k",
+        mIdx: Number(match[2]),
+        team: match[3],
+    };
+};
+
+const normalizeScoreValue = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.trunc(numeric));
+};
 
 const toArray = (raw) => {
     if (!raw) return [];
@@ -96,32 +114,57 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
     const [optimisticScores, setOptimisticScores] = useState({});
     const sourceIdRef = useRef(getOrCreateScoreSourceId());
     const lastCompactionAtRef = useRef(0);
+    const confirmInFlightRef = useRef(new Set());
 
     useEffect(() => {
         localScores.current = {};
         setOptimisticScores({});
     }, [activeTournamentId]);
 
-    // Optimistic UI Reconciliation:
-    // When the server sends new match data, if our local offline/pending queue is empty,
-    // it means all our local optimistic taps have reached the server. We can safely
-    // clear the local memory cache and snap precisely to the true server state.
-    // This inherently resolves stale conflicts because the UI will visually "snap back"
-    // to the true value if a tap was rejected by the server logic.
-    useEffect(() => {
-        let isCurrent = true;
-        void loadPendingEvents().then((queued) => {
-            if (!isCurrent) return;
-            if (queued.length === 0) {
-                localScores.current = {};
-                setOptimisticScores({});
-            }
-        });
+    const getServerScoreForKey = useCallback((key) => {
+        const parsed = parseScoreKey(key);
+        if (!parsed) return null;
 
-        return () => {
-            isCurrent = false;
-        };
-    }, [data.matches, data.knockouts]);
+        const source = parsed.isKnockout ? data?.knockouts : data?.matches;
+        const match = Array.isArray(source) ? source[parsed.mIdx] : null;
+        if (!match) return null;
+
+        const scoreField = parsed.team === "A" ? "sA" : "sB";
+        const value = Number(match[scoreField]);
+        return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : null;
+    }, [data?.knockouts, data?.matches]);
+
+    // Reconcile each optimistic key only when server score actually catches up.
+    // This avoids score snap-back during fast taps under network latency.
+    useEffect(() => {
+        setOptimisticScores((prev) => {
+            const keys = Object.keys(prev || {});
+            if (!keys.length) return prev;
+
+            let changed = false;
+            const next = { ...prev };
+
+            keys.forEach((key) => {
+                const optimisticScore = Number(prev[key]);
+                const serverScore = getServerScoreForKey(key);
+
+                if (!Number.isFinite(optimisticScore)) {
+                    delete next[key];
+                    delete localScores.current[key];
+                    changed = true;
+                    return;
+                }
+
+                if (serverScore === optimisticScore) {
+                    delete next[key];
+                    delete localScores.current[key];
+                    changed = true;
+                }
+            });
+
+            return changed ? next : prev;
+        });
+    }, [getServerScoreForKey, data?.matches, data?.knockouts]);
 
     const flushPendingScoreEvents = useCallback(async () => {
         const queued = await loadPendingEvents();
@@ -176,6 +219,30 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         }
     }, [activeTournamentId]);
 
+    const getResolvedMatchAt = useCallback((idx, isKnockout) => {
+        const source = isKnockout ? data?.knockouts : data?.matches;
+        if (!Array.isArray(source) || idx < 0 || idx >= source.length) return null;
+
+        const baseMatch = source[idx];
+        if (!baseMatch) return null;
+
+        const keyA = scoreKeyForEvent(!!isKnockout, idx, "A");
+        const keyB = scoreKeyForEvent(!!isKnockout, idx, "B");
+
+        const resolvedSA = localScores.current[keyA] !== undefined
+            ? normalizeScoreValue(localScores.current[keyA])
+            : normalizeScoreValue(baseMatch.sA);
+        const resolvedSB = localScores.current[keyB] !== undefined
+            ? normalizeScoreValue(localScores.current[keyB])
+            : normalizeScoreValue(baseMatch.sB);
+
+        return {
+            ...baseMatch,
+            sA: resolvedSA,
+            sB: resolvedSB,
+        };
+    }, [data?.knockouts, data?.matches]);
+
     const maybeCompactScoreEvents = useCallback(async () => {
         if (!activeTournamentId) return;
         await ensureFirebaseSession();
@@ -215,7 +282,10 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         if (!markerOk) return;
 
         const deltas = buildLeaderboardDeltasFromMatch(match);
-        if (!deltas.length) return;
+        if (!deltas.length) {
+            await clearLeaderboardMarker(activeTournamentId, scope, idx);
+            return;
+        }
 
         // Abstract Leaderboard updates
         // To maintain dual-write parity while Cloud Functions are built, we will manually
@@ -235,19 +305,26 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
             updates[`${base}/pa`] = increment(delta.pa);
         });
 
-        if (Object.keys(updates).length === 0) return;
+        if (Object.keys(updates).length === 0) {
+            await clearLeaderboardMarker(activeTournamentId, scope, idx);
+            return;
+        }
 
         try {
             await applyRtdbLeaderboardUpdates(updates);
         } catch (error) {
             console.error("Leaderboard update failed", error);
+            const rollbackOk = await clearLeaderboardMarker(activeTournamentId, scope, idx);
+            if (!rollbackOk) {
+                console.error("Leaderboard marker rollback failed", { activeTournamentId, scope, idx });
+            }
         }
     }, [activeTournamentId]);
 
     const adjustScore = (mIdx, team, delta, isKnockout) => {
         if (!isAdmin || !activeTournamentId) return;
 
-        const key = `${isKnockout ? "k" : "m"}-${mIdx}-${team}`;
+        const key = scoreKeyForEvent(isKnockout, mIdx, team);
 
         let currentScore;
         let expectedVersion = 0;
@@ -298,56 +375,80 @@ export const useScoring = (activeTournamentId, data, isAdmin) => {
         void dispatchEventToBackend(eventPayload);
     };
 
-    const confirmMatch = async (mIdx) => {
+    const confirmMatch = useCallback(async (mIdx) => {
         if (!isAdmin || !activeTournamentId) return;
-        await ensureFirebaseSession();
+        const inFlightKey = `m-${mIdx}`;
+        if (confirmInFlightRef.current.has(inFlightKey)) return;
+        confirmInFlightRef.current.add(inFlightKey);
 
-        if (!data.matches || !Array.isArray(data.matches) || mIdx < 0 || mIdx >= data.matches.length) {
-            console.error("Invalid match index or missing matches array");
-            return;
-        }
+        try {
+            await ensureFirebaseSession();
 
-        const match = data.matches[mIdx];
-        if (!match || match.done) return;
-
-        triggerHaptic([100, 50, 100]);
-
-        await confirmMatchCompleted(activeTournamentId, mIdx, false);
-        void applyMatchResultToGlobalLeaderboard({ ...match, done: true }, "matches", mIdx);
-        void maybeCompactScoreEvents();
-    };
-
-    const confirmKnockout = async (idx) => {
-        if (!isAdmin || !activeTournamentId) return;
-        await ensureFirebaseSession();
-
-        if (!data.knockouts || !Array.isArray(data.knockouts) || idx < 0 || idx >= data.knockouts.length) {
-            console.error("Invalid knockout index or missing knockouts array");
-            return;
-        }
-
-        const selected = data.knockouts[idx];
-        if (!selected || selected.done) return;
-
-        if (selected.id === "final") triggerHaptic([200, 100, 200, 100, 500, 100, 800]);
-        else triggerHaptic([100, 50, 100]);
-
-        const newKnockouts = data.knockouts.map((k, i) => (i === idx ? { ...k, done: true } : k));
-        const advanced = getKnockoutAdvancement(newKnockouts, data.format, data.pools);
-
-        await confirmMatchCompleted(activeTournamentId, idx, true);
-
-        if (advanced) {
-            const final = advanced.find((k) => k.id === "final");
-            if (final) {
-                await setKnockoutMatch(activeTournamentId, data.knockouts.length, final);
+            if (!data.matches || !Array.isArray(data.matches) || mIdx < 0 || mIdx >= data.matches.length) {
+                console.error("Invalid match index or missing matches array");
+                return;
             }
-            triggerHaptic([100, 100, 200, 200]);
-        }
 
-        void applyMatchResultToGlobalLeaderboard({ ...selected, done: true }, "knockouts", idx);
-        void maybeCompactScoreEvents();
-    };
+            const match = getResolvedMatchAt(mIdx, false);
+            if (!match || match.done) return;
+            const matchState = getMatchState(match.sA, match.sB, data?.pointsToWin);
+            if (matchState.phase !== "finished") return;
+
+            triggerHaptic([100, 50, 100]);
+
+            await confirmMatchCompleted(activeTournamentId, mIdx, false);
+            void applyMatchResultToGlobalLeaderboard({ ...match, done: true }, "matches", mIdx);
+            void maybeCompactScoreEvents();
+        } finally {
+            confirmInFlightRef.current.delete(inFlightKey);
+        }
+    }, [isAdmin, activeTournamentId, data?.matches, data?.pointsToWin, getResolvedMatchAt, triggerHaptic, applyMatchResultToGlobalLeaderboard, maybeCompactScoreEvents]);
+
+    const confirmKnockout = useCallback(async (idx) => {
+        if (!isAdmin || !activeTournamentId) return;
+        const inFlightKey = `k-${idx}`;
+        if (confirmInFlightRef.current.has(inFlightKey)) return;
+        confirmInFlightRef.current.add(inFlightKey);
+
+        try {
+            await ensureFirebaseSession();
+
+            if (!data.knockouts || !Array.isArray(data.knockouts) || idx < 0 || idx >= data.knockouts.length) {
+                console.error("Invalid knockout index or missing knockouts array");
+                return;
+            }
+
+            const selected = getResolvedMatchAt(idx, true);
+            if (!selected || selected.done) return;
+            const selectedState = getMatchState(selected.sA, selected.sB, data?.pointsToWin);
+            if (selectedState.phase !== "finished") return;
+
+            if (selected.id === "final") triggerHaptic([200, 100, 200, 100, 500, 100, 800]);
+            else triggerHaptic([100, 50, 100]);
+
+            const resolvedKnockouts = data.knockouts.map((_, i) => {
+                const resolved = getResolvedMatchAt(i, true);
+                return resolved || data.knockouts[i];
+            });
+            const newKnockouts = resolvedKnockouts.map((k, i) => (i === idx ? { ...k, done: true } : k));
+            const advanced = getKnockoutAdvancement(newKnockouts, data.format, data.pools);
+
+            await confirmMatchCompleted(activeTournamentId, idx, true);
+
+            if (advanced) {
+                const final = advanced.find((k) => k.id === "final");
+                if (final) {
+                    await setKnockoutMatch(activeTournamentId, data.knockouts.length, final);
+                }
+                triggerHaptic([100, 100, 200, 200]);
+            }
+
+            void applyMatchResultToGlobalLeaderboard({ ...selected, done: true }, "knockouts", idx);
+            void maybeCompactScoreEvents();
+        } finally {
+            confirmInFlightRef.current.delete(inFlightKey);
+        }
+    }, [isAdmin, activeTournamentId, data?.knockouts, data?.pointsToWin, data?.format, data?.pools, getResolvedMatchAt, triggerHaptic, applyMatchResultToGlobalLeaderboard, maybeCompactScoreEvents]);
 
     return { adjustScore, confirmMatch, confirmKnockout, optimisticScores };
 };

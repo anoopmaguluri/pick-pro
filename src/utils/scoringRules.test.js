@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMatchState, getPhaseLabel } from './scoringRules';
+import { getMatchState, getPhaseLabel, normalizeWinTarget } from './scoringRules';
 
 describe('getMatchState', () => {
     it('should correctly identify a winner (not in deuce)', () => {
@@ -43,6 +43,18 @@ describe('getMatchState', () => {
         const gpB = getMatchState(5, 10);
         expect(gpB.gamePointTeam).toBe('B');
     });
+
+    it('should respect custom win target rules', () => {
+        expect(getMatchState(14, 12, 15).phase).toBe('playing');
+        expect(getMatchState(15, 12, 15).phase).toBe('finished');
+
+        const deuce15 = getMatchState(14, 14, 15);
+        expect(deuce15.phase).toBe('deuce');
+        expect(deuce15.isDeuceZone).toBe(true);
+
+        const gamePoint15 = getMatchState(14, 10, 15);
+        expect(gamePoint15.gamePointTeam).toBe('A');
+    });
 });
 
 describe('getPhaseLabel', () => {
@@ -51,5 +63,15 @@ describe('getPhaseLabel', () => {
         expect(getPhaseLabel('finished')).toBe('GAME');
         expect(getPhaseLabel('advantage', 'A', null, 'Alice', 'Bob')).toBe('ADV \u00b7 Alice');
         expect(getPhaseLabel('playing', null, 'B', 'Alice', 'Bob')).toBe('GAME PT \u00b7 Bob');
+    });
+});
+
+describe('normalizeWinTarget', () => {
+    it('should allow only supported point targets', () => {
+        expect(normalizeWinTarget(11)).toBe(11);
+        expect(normalizeWinTarget(15)).toBe(15);
+        expect(normalizeWinTarget(21)).toBe(21);
+        expect(normalizeWinTarget(9)).toBe(11);
+        expect(normalizeWinTarget(undefined)).toBe(11);
     });
 });

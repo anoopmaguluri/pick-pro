@@ -2,28 +2,32 @@ import React, { useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, CheckCircle2 } from "lucide-react";
 import PlayerAvatar from "../../common/PlayerAvatar";
-import { getMatchState, getPhaseLabel } from "../../../utils/scoringRules";
+import { getMatchState, getPhaseLabel, normalizeWinTarget } from "../../../utils/scoringRules";
 
 // ─── constants ────────────────────────────────────────────────────────────────
-const WIN_TARGET = 11;
 const HOLD_MS = 480;
 const SPRING_POP = { type: "spring", stiffness: 520, damping: 22, mass: 0.5 };
 const SPRING_CARD = { type: "spring", stiffness: 320, damping: 30 };
-const PIP_COUNT = WIN_TARGET; // always render exactly 11 pips
+const DISPLAY_PIP_COUNT = 11;
 
 // ─── Pip Bar ─────────────────────────────────────────────────────────────────
-// Fixed-size circular pips – fills min(score, 11) from the outer edge inward.
-// In deuce zone all 11 glow; the score number + PhaseBanner carry context.
-function PipBar({ score, side, isDeuceZone }) {
-    const filled = Math.min(score, PIP_COUNT);
+// Fixed-size circular pips (11) to keep visibility consistent across targets.
+// For 15/21-point games this acts as a progress strip.
+function PipBar({ score, side, isDeuceZone, winTarget }) {
+    const target = normalizeWinTarget(winTarget);
+    const current = Math.max(0, Number(score) || 0);
+    const scaled = target > DISPLAY_PIP_COUNT
+        ? Math.round((Math.min(current, target) / target) * DISPLAY_PIP_COUNT)
+        : Math.min(current, DISPLAY_PIP_COUNT);
+    const filled = Math.max(current > 0 ? 1 : 0, Math.min(DISPLAY_PIP_COUNT, scaled));
     const reversed = side === "B";          // B fills right → left
 
     return (
         <div
-            className="flex items-center gap-[3px]"
-            style={{ flexDirection: reversed ? "row-reverse" : "row" }}
+            className="flex items-center"
+            style={{ flexDirection: reversed ? "row-reverse" : "row", gap: 3 }}
         >
-            {Array.from({ length: PIP_COUNT }).map((_, i) => {
+            {Array.from({ length: DISPLAY_PIP_COUNT }).map((_, i) => {
                 const active = i < filled;
                 return (
                     <motion.div
@@ -105,7 +109,7 @@ function PhaseBanner({ phase, label }) {
 // Single team's side. Tap = +1, hold HOLD_MS = −1.
 // Interaction is BLOCKED once phase === "finished" (winner determined) until
 // the match is officially finalized, preventing runaway score entry.
-function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isWinnerHighlight }) {
+function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isWinnerHighlight, winTarget }) {
     const longTimer = useRef(null);
     const didLongPress = useRef(false);
     const pendingScore = useRef(false); // guard: only one tap fires per gesture
@@ -124,6 +128,13 @@ function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isW
         e.stopPropagation();
         // Only start a gesture if at least one action is possible
         if (!isAdmin || (tapBlocked && subtractBlocked)) return;
+        if (typeof e.currentTarget?.setPointerCapture === "function") {
+            try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+                // Ignore capture errors for unsupported pointers.
+            }
+        }
         didLongPress.current = false;
         pendingScore.current = !tapBlocked; // only mark pending-add if tap is allowed
 
@@ -137,6 +148,13 @@ function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isW
 
     const onUp = useCallback((e) => {
         e.stopPropagation();
+        if (typeof e.currentTarget?.releasePointerCapture === "function") {
+            try {
+                e.currentTarget.releasePointerCapture(e.pointerId);
+            } catch {
+                // Ignore release errors for unsupported pointers.
+            }
+        }
         if (longTimer.current) { clearTimeout(longTimer.current); longTimer.current = null; }
         if (!isAdmin) return;
         // Fire +1 only if tap was pending (not a long-press, and add is still allowed)
@@ -162,7 +180,6 @@ function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isW
             onPointerDown={onDown}
             onPointerUp={onUp}
             onPointerCancel={onCancel}
-            onPointerLeave={onCancel}
         >
             {/* Winner radial glow */}
             < AnimatePresence >
@@ -241,17 +258,18 @@ function HalfZone({ team, score, side, matchState, isAdmin, isDone, onScore, isW
                 </div>
 
                 {/* Pip bar */}
-                <PipBar score={score} side={side} isDeuceZone={matchState.isDeuceZone} />
+                <PipBar score={score} side={side} isDeuceZone={matchState.isDeuceZone} winTarget={winTarget} />
             </div>
         </div >
     );
 }
 
 // ─── MatchCard ────────────────────────────────────────────────────────────────
-export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore, onConfirm }) {
+export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore, onConfirm, pointsToWin }) {
     const isKnockout = type === "knockout";
     const isWinnerHighlight = isKnockout && match.id === "final" && match.done;
-    const matchState = getMatchState(match.sA, match.sB);
+    const winTarget = normalizeWinTarget(pointsToWin ?? match?.pointsToWin);
+    const matchState = getMatchState(match.sA, match.sB, winTarget);
     const { phase, winner } = matchState;
 
     const phaseLabel = !match.done
@@ -300,6 +318,20 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                 </div>
             )}
 
+            {!isKnockout && (
+                <div
+                    className="absolute top-3 right-4 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.16em] z-20 pointer-events-none"
+                    style={{
+                        color: "rgba(255,202,40,0.95)",
+                        border: "1px solid rgba(255,202,40,0.35)",
+                        background: "linear-gradient(135deg, rgba(255,202,40,0.2), rgba(245,124,0,0.12))",
+                        boxShadow: "0 0 14px rgba(255,202,40,0.2), inset 0 1px 0 rgba(255,255,255,0.15)",
+                    }}
+                >
+                    TO {winTarget}
+                </div>
+            )}
+
             {/* Split HUD */}
             <div className="flex relative" style={{ minHeight: 210 }}>
                 {/* Team A */}
@@ -309,6 +341,7 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                     isAdmin={isAdmin} isDone={match.done}
                     onScore={onScore}
                     isWinnerHighlight={isWinnerHighlight}
+                    winTarget={winTarget}
                 />
 
                 {/* Centre divider + phase banner */}
@@ -345,6 +378,7 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                     isAdmin={isAdmin} isDone={match.done}
                     onScore={onScore}
                     isWinnerHighlight={isWinnerHighlight}
+                    winTarget={winTarget}
                 />
             </div>
 
@@ -370,17 +404,13 @@ export default function MatchCard({ match, idx, type = "pool", isAdmin, onScore,
                                 whileHover={{ scale: 1.02 }}
                                 transition={{ type: "spring", stiffness: 420, damping: 22 }}
                                 onClick={onConfirm}
-                                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[1.3rem] relative overflow-hidden"
+                                className="neo-btn neo-btn-success w-full flex items-center justify-center gap-2 py-3.5 rounded-[1.3rem] relative overflow-hidden"
                                 style={{
                                     fontFamily: "'Space Grotesk', sans-serif",
                                     fontSize: "0.62rem",
                                     fontWeight: 800,
                                     letterSpacing: "0.12em",
                                     textTransform: "uppercase",
-                                    background: "linear-gradient(135deg, #22c55e, #16a34a)",
-                                    color: "#fff",
-                                    border: "1px solid rgba(34,197,94,0.45)",
-                                    boxShadow: "0 4px 20px rgba(34,197,94,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
                                 }}
                             >
                                 {/* Shimmer sweep */}

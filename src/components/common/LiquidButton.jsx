@@ -9,26 +9,29 @@ const SPRING_BLOB = { stiffness: 200, damping: 15, mass: 1 };
 const VARIANTS = {
     primary: {
         backgroundSize: "200% 200%",
-        backgroundImage: "linear-gradient(135deg, #FFCA28 0%, #FF6F00 50%, #FFCA28 100%)",
+        backgroundImage: "linear-gradient(135deg, rgba(255,202,40,0.95) 0%, rgba(245,124,0,0.96) 48%, rgba(255,202,40,0.95) 100%)",
         animation: "liquidShift 3.5s ease infinite",
         color: "#030712",
-        boxShadow: "0 8px 32px -6px rgba(255,160,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 0 rgba(0,0,0,0.1)",
+        border: "1px solid rgba(255,202,40,0.52)",
+        boxShadow: "0 12px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.35), 0 0 24px rgba(255,202,40,0.24)",
     },
     secondary: {
-        background: "rgba(255,255,255,0.07)",
-        border: "1px solid rgba(255,255,255,0.13)",
-        color: "rgba(255,255,255,0.9)",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.07)",
+        background: "linear-gradient(145deg, rgba(255,202,40,0.2), rgba(245,124,0,0.12))",
+        border: "1px solid rgba(255,202,40,0.28)",
+        color: "rgba(255,248,225,0.95)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 20px rgba(255,202,40,0.14)",
     },
     ghost: {
-        background: "transparent",
-        border: "1px solid rgba(255,255,255,0.1)",
-        color: "rgba(255,255,255,0.5)",
+        background: "rgba(2,6,23,0.52)",
+        border: "1px solid rgba(255,202,40,0.18)",
+        color: "rgba(255,255,255,0.78)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.26)",
     },
     danger: {
-        background: "linear-gradient(135deg, #dc2626, #ef4444)",
-        color: "white",
-        boxShadow: "0 4px 20px rgba(239,68,68,0.3)",
+        background: "linear-gradient(145deg, rgba(239,68,68,0.28), rgba(185,28,28,0.2))",
+        border: "1px solid rgba(248,113,113,0.35)",
+        color: "rgba(254,226,226,0.95)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 20px rgba(248,113,113,0.2)",
     },
 };
 
@@ -43,6 +46,7 @@ export default function LiquidButton({
     children,
     onClick,
     variant = "primary",
+    glossy = false,
     className = "",
     style = {},
     disabled = false,
@@ -93,7 +97,7 @@ export default function LiquidButton({
             disabled={disabled}
             whileHover={!disabled ? { scale: 1.025 } : {}}
             transition={SPRING_PRESS}
-            className={`liquid-btn ${variant === "primary" ? "liquid-btn-primary" : ""} ${disabled ? "opacity-30 cursor-not-allowed" : ""} ${className}`}
+            className={`liquid-btn neo-btn ${variant === "primary" ? "liquid-btn-primary" : ""} ${disabled ? "opacity-30 cursor-not-allowed" : ""} ${className}`}
             style={{
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 800,
@@ -123,8 +127,10 @@ export default function LiquidButton({
                     borderRadius: "inherit",
                     background: "linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 60%)", // brighter gloss
                     pointerEvents: "none",
+                    zIndex: 0,
                 }} />
             )}
+            {glossy && <span aria-hidden className="neo-gloss-sweep" style={{ zIndex: 0 }} />}
             <span style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: "0.4rem" }}>
                 {children}
             </span>

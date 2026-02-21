@@ -29,15 +29,15 @@ export default function Modal({
             title={title}
             subtitle={message}
             actions={
-                <div className="flex gap-3 w-full">
+                <div className={`grid gap-3 w-full ${onConfirm ? "grid-cols-2" : "grid-cols-1"}`}>
                     <LiquidButton onClick={onCancel} variant="ghost"
-                        style={{ flex: 1, borderRadius: "1rem", padding: "1rem" }}>
+                        style={{ borderRadius: "1rem", padding: "0.95rem 1rem", fontSize: "0.7rem", letterSpacing: "0.12em" }}>
                         Cancel
                     </LiquidButton>
                     {onConfirm && (
                         <LiquidButton onClick={onConfirm}
                             variant={isDestructive ? "danger" : "primary"}
-                            style={{ flex: 1, borderRadius: "1rem", padding: "1rem" }}>
+                            style={{ borderRadius: "1rem", padding: "0.95rem 1rem", fontSize: "0.7rem", letterSpacing: "0.12em" }}>
                             {confirmText}
                         </LiquidButton>
                     )}

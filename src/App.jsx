@@ -25,6 +25,7 @@ import { useHaptic } from "./hooks/useHaptic";
 import { buildRoundRobin, buildKnockouts, qualifyCount } from "./utils/gameLogic";
 import { calculateStandings } from "./utils/standingsCalculator";
 import { buildPlayersPreview, leaderboardRowsFromEncoded } from "./utils/leaderboard";
+import { DEFAULT_WIN_TARGET, normalizeWinTarget } from "./utils/scoringRules";
 
 import TournamentWorker from "./workers/tournamentBuilder.worker.js?worker";
 import StandingsWorker from "./workers/standings.worker.js?worker";
@@ -52,6 +53,7 @@ function App() {
   const [manualTeams, setManualTeams] = useState([]);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [matchFormat, setMatchFormat] = useState("doubles"); // "singles" | "doubles"
+  const [pointsToWin, setPointsToWin] = useState(DEFAULT_WIN_TARGET);
 
   // UI State
   const [hubTab, setHubTab] = useState("events");
@@ -81,7 +83,7 @@ function App() {
   // Normalize data structures to ensure matches/knockouts are always arrays
   // Firebase often converts arrays to objects if keys are missing or stringy.
   const data = useMemo(() => {
-    if (!rawData) return { matches: [], knockouts: [], teams: [] };
+    if (!rawData) return { matches: [], knockouts: [], teams: [], pointsToWin: DEFAULT_WIN_TARGET };
     const normalize = (val) => {
       if (!val) return [];
       if (Array.isArray(val)) return val.filter(Boolean);
@@ -89,11 +91,20 @@ function App() {
     };
     return {
       ...rawData,
+      pointsToWin: normalizeWinTarget(rawData.pointsToWin),
       matches: normalize(rawData.matches),
       knockouts: normalize(rawData.knockouts),
       teams: normalize(rawData.teams)
     };
   }, [rawData]);
+
+  useEffect(() => {
+    if (!activeTournamentId) {
+      setPointsToWin(DEFAULT_WIN_TARGET);
+      return;
+    }
+    setPointsToWin(normalizeWinTarget(data?.pointsToWin));
+  }, [activeTournamentId, data?.pointsToWin]);
 
   // Passing activeTournamentId and derived data to hooks
   // Note: useScoring internally manages localScores ref
@@ -272,6 +283,7 @@ function App() {
         name: newTourneyName,
         createdAt: now,
         status: "draft",
+        pointsToWin: DEFAULT_WIN_TARGET,
         draftPlayers: [],
         playersPreview: [],
         playerCount: 0,
@@ -281,6 +293,7 @@ function App() {
         name: newTourneyName,
         createdAt: now,
         status: "draft",
+        pointsToWin: DEFAULT_WIN_TARGET,
         draftPlayers: [],
         matches: [],
         knockouts: [],
@@ -362,6 +375,21 @@ function App() {
     triggerHaptic(20);
   };
 
+  const handlePointsToWinChange = async (targetPoints) => {
+    const nextPoints = normalizeWinTarget(targetPoints);
+    setPointsToWin(nextPoints);
+
+    if (!activeTournamentId || data?.status !== "draft") return;
+
+    try {
+      await ensureFirebaseSession();
+      await patchTournament(activeTournamentId, { pointsToWin: nextPoints }, { pointsToWin: nextPoints });
+    } catch (error) {
+      console.error("Failed to update points target", error);
+      showAlert("Error", "Could not update points target right now.");
+    }
+  };
+
   /* 
    * Prepares the tournament data asynchronously using a Web Worker.
    * Returns a Promise resolving to: { format, teams, matches, players }
@@ -391,17 +419,20 @@ function App() {
   const commitAutoTournament = async (previewData) => {
     try {
       await ensureFirebaseSession();
+      const resolvedPointsToWin = normalizeWinTarget(pointsToWin);
 
       // Write full heavy tree to data via abstraction
       const metaSummary = buildMetaPlayerSummary(previewData.players || []);
       const completeData = {
         ...previewData,
         status: "active",
+        pointsToWin: resolvedPointsToWin,
         knockouts: previewData.knockouts || []
       };
       await patchTournament(activeTournamentId, completeData, {
         status: "active",
         format: previewData.format,
+        pointsToWin: resolvedPointsToWin,
         ...metaSummary,
       });
 
@@ -469,6 +500,7 @@ function App() {
 
     let newMatches = [];
     let knockouts = [];
+    const resolvedPointsToWin = normalizeWinTarget(pointsToWin);
 
     if (teams.length === 2) {
       // 2 Teams only? Skip round robin, go straight to Grand Final
@@ -492,6 +524,7 @@ function App() {
       const payload = {
         status: "active",
         format: "fixed",
+        pointsToWin: resolvedPointsToWin,
         teams: teams,
         matches: newMatches,
         knockouts: knockouts
@@ -499,6 +532,7 @@ function App() {
       await patchTournament(activeTournamentId, payload, {
         status: "active",
         format: "fixed",
+        pointsToWin: resolvedPointsToWin,
         ...metaSummary
       });
 
@@ -567,6 +601,8 @@ function App() {
               // Format
               matchFormat={matchFormat}
               setMatchFormat={setMatchFormat}
+              pointsToWin={pointsToWin}
+              setPointsToWin={handlePointsToWinChange}
               // Setup
               newPlayer={newPlayer}
               setNewPlayer={setNewPlayer}

@@ -28,6 +28,10 @@ export default function LiquidTabBar({
     onChange,
     className = "",
     style = {},
+    containerStyle = {},
+    activeTabStyle = {},
+    inactiveTabStyle = {},
+    pillStyle = {},
 }) {
     const containerRef = useRef(null);
     const tabCount = tabs.length;
@@ -74,10 +78,15 @@ export default function LiquidTabBar({
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     const snapToInt = (f) => clamp(Math.round(f), 0, tabCount - 1);
     const getRect = () => containerRef.current?.getBoundingClientRect();
+    const activeLabelColor = activeTabStyle.color || "#fff8e1";
+    const inactiveLabelColor = inactiveTabStyle.color || "rgba(255,255,255,0.45)";
 
     // ── pointer handlers ─────────────────────────────────────────────────────
     const onPointerDown = useCallback((e) => {
-        containerRef.current?.setPointerCapture(e.pointerId);
+        // Avoid hard touch capture so vertical page scroll stays fluid.
+        if (e.pointerType !== "touch") {
+            containerRef.current?.setPointerCapture(e.pointerId);
+        }
         hasCaptured.current = true;
         isDragging.current = false;
 
@@ -175,9 +184,10 @@ export default function LiquidTabBar({
                 boxShadow: "none",
                 userSelect: "none",
                 WebkitUserSelect: "none",
-                touchAction: "none",
+                touchAction: "pan-y",
                 cursor: "pointer",
                 ...style,
+                ...containerStyle,
             }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -207,12 +217,22 @@ export default function LiquidTabBar({
                         scaleX,
                         scaleY,
                         borderRadius: `${BASE_RADIUS}px`,
-                        background: "linear-gradient(135deg, rgba(255, 202, 40, 0.85) 0%, rgba(255, 111, 0, 0.95) 100%)",
+                        background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                        border: "1px solid rgba(255,202,40,0.62)",
                         backdropFilter: "blur(8px)",
                         WebkitBackdropFilter: "blur(8px)",
-                        boxShadow: "inset 0 1px 0.5px rgba(255,255,255,0.6), inset 0 -2px 1px rgba(0,0,0,0.2), 0 4px 16px rgba(255, 160, 0, 0.5), 0 8px 24px -4px rgba(0,0,0,0.3)",
+                        boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                        ...pillStyle,
+                        ...activeTabStyle,
                     }}
-                />
+                >
+                    <div
+                        className="absolute inset-0 pointer-events-none overflow-hidden"
+                        style={{ borderRadius: "inherit" }}
+                    >
+                        <div className="neo-gloss-sweep opacity-85" />
+                    </div>
+                </motion.div>
             </motion.div>
 
             {/* ── TAB LABELS ─────────────────────────────────────────────────── */}
@@ -231,7 +251,7 @@ export default function LiquidTabBar({
                             letterSpacing: "0.12em",
                             textTransform: "uppercase",
                             // We can animate this color too if we want, but simple prop update is usually fine for text
-                            color: isActive ? "#0F172A" : "rgba(255,255,255,0.4)",
+                            color: isActive ? activeLabelColor : inactiveLabelColor,
                             transition: "color 0.2s ease",
                             pointerEvents: "none",
                         }}

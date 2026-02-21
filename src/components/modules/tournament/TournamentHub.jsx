@@ -12,15 +12,61 @@ import {
     Lock,
     Unlock,
     Zap,
-    Star,
     Crown,
+    ChevronRight,
 } from "lucide-react";
 import { useHaptic } from "../../../hooks/useHaptic";
 import PlayerAvatar from "../../common/PlayerAvatar";
 import Modal from "../../common/Modal";
-import GlassModal from "../../common/GlassModal";
 import LiquidButton from "../../common/LiquidButton";
 import LiquidTabBar from "../../common/LiquidTabBar";
+import GlassHeader from "../../common/GlassHeader";
+import { getMonogram } from "../../../utils/formatting";
+
+const toNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const formatEventType = (value) => {
+    const type = String(value || "").trim().toLowerCase();
+    if (type === "singles") return "Singles";
+    if (type === "mixer") return "Mixer";
+    if (type === "fixed" || type === "pairs") return "Fixed Teams";
+    return "Open";
+};
+
+const formatEventDate = (timestamp) => {
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || ts <= 0) return "Unknown date";
+    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const formatEventAge = (timestamp) => {
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || ts <= 0) return "";
+
+    const now = Date.now();
+    const diffMs = Math.max(0, now - ts);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const hourMs = 60 * 60 * 1000;
+
+    if (diffMs < hourMs) return "just now";
+    if (diffMs < dayMs) return `${Math.floor(diffMs / hourMs)}h ago`;
+    if (diffMs < dayMs * 30) return `${Math.floor(diffMs / dayMs)}d ago`;
+    return `${Math.floor(diffMs / (dayMs * 30))}mo ago`;
+};
+
+const rankingColumnLayout = "grid-cols-[28px_minmax(0,1fr)_56px_64px]";
+const toRatingStr = (player) => toNumber(player?.rating).toFixed(2);
+const toWinRatePct = (player) => {
+    const wins = toNumber(player?.w);
+    const losses = toNumber(player?.l);
+    const played = wins + losses;
+    const baseRate = played > 0 ? wins / played : 0;
+    const winRate = toNumber(player?.winRate) || baseRate;
+    return Math.max(0, Math.min(100, Math.round(winRate * 100)));
+};
 
 export default function TournamentHub({
     tournaments,
@@ -36,6 +82,8 @@ export default function TournamentHub({
     setHubTab,
 }) {
     const { trigger: triggerHaptic } = useHaptic();
+    const hubHeaderRef = React.useRef(null);
+    const [hubHeaderHeight, setHubHeaderHeight] = React.useState(0);
 
     const [deleteModal, setDeleteModal] = React.useState({
         show: false,
@@ -46,6 +94,33 @@ export default function TournamentHub({
     const sortedTournaments = Object.values(tournaments || {}).sort(
         (a, b) => b.createdAt - a.createdAt
     );
+    const activeEventsCount = sortedTournaments.filter((event) => event?.status === "active").length;
+    const draftEventsCount = sortedTournaments.filter((event) => event?.status === "draft").length;
+    const doneEventsCount = sortedTournaments.filter((event) => event?.status === "done").length;
+    const leaderboard = Array.isArray(globalLeaderboard) ? globalLeaderboard : [];
+    const leaderboardAverageWinRate = leaderboard.length > 0
+        ? Math.round((leaderboard.reduce((sum, p) => sum + (toNumber(p.winRate) * 100), 0) / leaderboard.length))
+        : 0;
+    const leaderboardTotalGames = leaderboard.reduce(
+        (sum, p) => sum + toNumber(p.w) + toNumber(p.l),
+        0
+    );
+    const topThree = leaderboard.slice(0, 3);
+    const remainingLeaderboard = leaderboard.slice(3);
+
+    React.useLayoutEffect(() => {
+        const element = hubHeaderRef.current;
+        if (!element) return undefined;
+
+        const syncHeight = () => {
+            setHubHeaderHeight(element.getBoundingClientRect().height);
+        };
+
+        syncHeight();
+        const observer = new ResizeObserver(syncHeight);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [hubTab]);
 
     return (
         <div className="w-full max-w-5xl mx-auto h-[100dvh] flex flex-col relative overflow-hidden"
@@ -73,14 +148,7 @@ export default function TournamentHub({
             <div className="absolute top-1/3 right-1/4 w-40 h-40 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(255,109,0,0.08)" }} />
 
             {/* ── STICKY GLASS HEADER (Logo + Search + Tabs) ── */}
-            <div className="fixed top-0 inset-x-0 z-50 rounded-b-3xl overflow-hidden"
-                style={{
-                    background: "rgba(3,7,18,0.7)",
-                    backdropFilter: "blur(20px) saturate(180%)",
-                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                    borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    boxShadow: "0 4px 30px rgba(0,0,0,0.5)",
-                }}>
+            <GlassHeader headerRef={hubHeaderRef}>
 
                 {/* HEADER */}
                 <header className="flex-none px-6 pt-12 pb-4 flex justify-between items-end relative z-10">
@@ -102,7 +170,25 @@ export default function TournamentHub({
                     <LiquidButton
                         onClick={() => { triggerHaptic(100); setIsAdmin(!isAdmin); }}
                         variant={isAdmin ? "primary" : "ghost"}
-                        style={{ width: 36, height: 36, padding: 0, borderRadius: "0.75rem", minWidth: 0 }}
+                        style={isAdmin
+                            ? {
+                                width: 36,
+                                height: 36,
+                                padding: 0,
+                                borderRadius: "0.75rem",
+                                minWidth: 0,
+                                background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                border: "1px solid rgba(255,202,40,0.62)",
+                                boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                color: "#fff8e1",
+                            }
+                            : {
+                                width: 36,
+                                height: 36,
+                                padding: 0,
+                                borderRadius: "0.75rem",
+                                minWidth: 0
+                            }}
                     >
                         {isAdmin ? <Unlock size={14} /> : <Lock size={14} />}
                     </LiquidButton>
@@ -127,7 +213,17 @@ export default function TournamentHub({
 
                             {newTourneyName.trim() && (
                                 <LiquidButton type="submit" variant="primary"
-                                    style={{ width: 36, height: 36, borderRadius: "0.75rem", padding: 0, flexShrink: 0 }}>
+                                    style={{
+                                        width: 36,
+                                        height: 36,
+                                        borderRadius: "0.75rem",
+                                        padding: 0,
+                                        flexShrink: 0,
+                                        background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+                                        border: "1px solid rgba(255,202,40,0.62)",
+                                        boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+                                        color: "#fff8e1",
+                                    }}>
                                     <Plus size={18} strokeWidth={3} />
                                 </LiquidButton>
                             )}
@@ -148,12 +244,88 @@ export default function TournamentHub({
                     />
                 </div>
 
-                {/* Bottom gloss highlight */}
-                <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-            </div>
+                {hubTab === "events" && (
+                    <div className="px-4 pb-4 relative z-10">
+                        <div
+                            className="relative rounded-2xl px-3 py-2.5 overflow-hidden"
+                            style={{
+                                background: "linear-gradient(135deg, rgba(10,16,32,0.94), rgba(2,9,23,0.95) 56%, rgba(16,13,6,0.9))",
+                                border: "1px solid rgba(120,132,156,0.2)",
+                                boxShadow: "0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+                                backdropFilter: "blur(14px)",
+                            }}
+                        >
+                            <div className="absolute inset-0 pointer-events-none">
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(255,202,40,0.15),transparent_40%)]" />
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(148,163,184,0.12),transparent_44%)]" />
+                            </div>
+
+                            <div className="relative z-10 flex items-center justify-between">
+                                <span className="text-[9px] font-black uppercase tracking-[0.22em]" style={{ color: "rgba(226,232,240,0.68)" }}>
+                                    Tour History
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <span
+                                        className="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.13em]"
+                                        style={{
+                                            background: "rgba(255,109,0,0.14)",
+                                            border: "1px solid rgba(255,109,0,0.25)",
+                                            color: "#FFB36B",
+                                        }}
+                                    >
+                                        Events {sortedTournaments.length}
+                                    </span>
+                                    {isAdmin && sortedTournaments.length > 0 && (
+                                        <span
+                                            className="hidden sm:inline-flex px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.12em]"
+                                            style={{
+                                                background: "rgba(15,23,42,0.6)",
+                                                border: "1px solid rgba(120,132,156,0.28)",
+                                                color: "rgba(191,207,227,0.7)",
+                                            }}
+                                        >
+                                            Swipe To Delete
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="relative z-10 mt-2 grid grid-cols-3 gap-1.5">
+                                <span
+                                    className="px-2 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-[0.12em] text-center"
+                                    style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.3)", color: "rgba(110,231,183,0.95)" }}
+                                >
+                                    Live {activeEventsCount}
+                                </span>
+                                <span
+                                    className="px-2 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-[0.12em] text-center"
+                                    style={{ background: "rgba(255,109,0,0.14)", border: "1px solid rgba(255,109,0,0.28)", color: "rgba(255,188,120,0.95)" }}
+                                >
+                                    Draft {draftEventsCount}
+                                </span>
+                                <span
+                                    className="px-2 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-[0.12em] text-center"
+                                    style={{ background: "rgba(255,202,40,0.14)", border: "1px solid rgba(255,202,40,0.28)", color: "rgba(255,238,170,0.95)" }}
+                                >
+                                    Done {doneEventsCount}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+            </GlassHeader>
 
             {/* MAIN CONTENT */}
-            <main className="flex-1 overflow-y-auto px-3 pb-8 relative z-10 pt-[250px]" style={{ scrollbarWidth: "none" }}>
+            <main
+                className={`flex-1 min-h-0 px-3 relative z-10 ${hubTab === "events" ? "overflow-y-auto" : "overflow-hidden"}`}
+                style={{
+                    paddingTop: `${Math.max(0, hubHeaderHeight) + 12}px`,
+                    scrollbarWidth: "none",
+                    WebkitOverflowScrolling: "touch",
+                    touchAction: "pan-y",
+                }}
+            >
                 <AnimatePresence mode="wait">
                     {hubTab === "events" ? (
                         <motion.div
@@ -162,24 +334,9 @@ export default function TournamentHub({
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 10 }}
                             transition={{ duration: 0.2, ease: "easeOut" }}
-                            className="space-y-1.5"
+                            className="pt-3 pb-10 space-y-1.5"
                         >
-                            {/* Section header with event count */}
-                            <div className="flex items-center justify-between px-2 pb-1">
-                                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/25">
-                                    Events
-                                </span>
-                                <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full"
-                                    style={{
-                                        background: "rgba(255,109,0,0.12)",
-                                        border: "1px solid rgba(255,109,0,0.22)",
-                                        color: "#FF6D00",
-                                    }}>
-                                    {sortedTournaments.length}
-                                </span>
-                            </div>
-
-                            <div className="md:grid md:grid-cols-2 md:gap-4 md:items-start space-y-1.5 md:space-y-0">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-2">
                                 <AnimatePresence initial={false} mode="popLayout">
                                     {sortedTournaments.map((t) => (
                                         <TournamentCardItem
@@ -213,162 +370,296 @@ export default function TournamentHub({
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -10 }}
                             transition={{ duration: 0.2, ease: "easeOut" }}
-                            className="space-y-4"
+                            className="h-full min-h-0 flex flex-col gap-3 overflow-hidden pb-3"
                         >
-                            {/* HERO PODIUM (1st Place) */}
-                            {globalLeaderboard && globalLeaderboard.length > 0 ? (
+                            {leaderboard.length > 0 ? (
                                 <>
-                                    {/* ── HERO #1 ── */}
-                                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative mb-3">
-                                        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/20 to-orange-600/20 rounded-3xl blur-xl" />
-                                        <div className="relative p-5 rounded-3xl overflow-hidden"
-                                            style={{
-                                                background: "rgba(255,255,255,0.03)",
-                                                border: "1px solid rgba(255,202,40,0.25)",
-                                                backdropFilter: "blur(24px)",
-                                                boxShadow: "inset 0 1px 0 rgba(255,202,40,0.18), inset 0 -1px 0 rgba(0,0,0,0.25), 0 8px 32px rgba(0,0,0,0.3)",
-                                            }}>
-                                            {/* Shimmer overlay */}
-                                            <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
-                                                <div className="absolute -inset-full"
-                                                    style={{
-                                                        background: "linear-gradient(105deg, transparent 40%, rgba(255,202,40,0.06) 45%, rgba(255,202,40,0.12) 50%, rgba(255,202,40,0.06) 55%, transparent 60%)",
-                                                        animation: "shimmer 3s ease-in-out infinite",
-                                                    }} />
-                                            </div>
-
-                                            <div className="flex items-center gap-5 relative z-10">
-                                                <div className="relative">
-                                                    {/* Animated glow ring */}
-                                                    <div className="absolute -inset-1.5 rounded-full opacity-60"
-                                                        style={{
-                                                            background: "conic-gradient(from 0deg, #FFCA28, #F57C00, #FFCA28)",
-                                                            animation: "spin 4s linear infinite",
-                                                        }} />
-                                                    <div className="absolute -inset-0.5 rounded-full bg-[#0f172a]" />
-                                                    <PlayerAvatar name={globalLeaderboard[0].name} className="relative w-16 h-16 text-lg shadow-xl" />
-                                                    <div className="absolute -bottom-2 -right-2 bg-amber-500 text-[#0f172a] w-7 h-7 flex items-center justify-center rounded-full font-black text-sm border-2 border-[#0f172a]">
-                                                        1
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-1">Current #1</div>
-                                                    <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-2 truncate">
-                                                        {globalLeaderboard[0].name}
-                                                    </h2>
-                                                    <div className="flex items-center gap-4">
-                                                        <div>
-                                                            <div className="text-[9px] text-white/40 font-bold uppercase">Rating</div>
-                                                            <div className="text-xl font-bold text-amber-400 font-mono">{globalLeaderboard[0].rating}</div>
-                                                        </div>
-                                                        <div className="w-px h-8 bg-white/10" />
-                                                        <div>
-                                                            <div className="text-[9px] text-white/40 font-bold uppercase">Win Rate</div>
-                                                            <div className="text-xl font-bold text-white font-mono">{Math.round(globalLeaderboard[0].winRate * 100)}%</div>
-                                                        </div>
-                                                        <div className="w-px h-8 bg-white/10" />
-                                                        <div>
-                                                            <div className="text-[9px] text-white/40 font-bold uppercase">Record</div>
-                                                            <div className="text-sm font-bold text-white/60 font-mono">{globalLeaderboard[0].w}W - {globalLeaderboard[0].l}L</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="relative rounded-[2rem] overflow-hidden p-4 shrink-0"
+                                        style={{
+                                            background: "linear-gradient(145deg, rgba(8,10,18,0.96), rgba(12,18,34,0.94) 56%, rgba(8,16,34,0.92))",
+                                            border: "1px solid rgba(255,202,40,0.3)",
+                                            boxShadow: "0 20px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -16px 24px rgba(2,6,23,0.36)",
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 pointer-events-none">
+                                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_5%_0%,rgba(255,202,40,0.22),transparent_38%)]" />
+                                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_95%_100%,rgba(148,163,184,0.12),transparent_40%)]" />
+                                            <div className="absolute inset-0 opacity-[0.05] bg-[repeating-linear-gradient(115deg,rgba(255,255,255,0.6)_0px,rgba(255,255,255,0.6)_1px,transparent_1px,transparent_14px)]" />
                                         </div>
-                                    </motion.div>
 
-                                    {/* ── 2nd & 3rd — frosted glass podium ── */}
-                                    {globalLeaderboard.length >= 2 && (
-                                        <div className="grid grid-cols-2 gap-2 mb-4">
-                                            {globalLeaderboard.slice(1, 3).map((p, i) => (
-                                                <motion.div key={p.name}
-                                                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + (i * 0.1) }}
-                                                    className="relative overflow-hidden rounded-2xl"
-                                                    style={{
-                                                        background: "rgba(255,255,255,0.03)",
-                                                        border: `1px solid ${i === 0 ? "rgba(226,232,240,0.18)" : "rgba(180,83,9,0.18)"}`,
-                                                        backdropFilter: "blur(24px)",
-                                                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.2)",
-                                                        marginTop: i === 0 ? "-4px" : "8px",  /* podium offset */
-                                                    }}
-                                                >
-                                                    <div className="p-4 flex flex-col items-center text-center">
-                                                        <div className="relative mb-3">
-                                                            <PlayerAvatar name={p.name} className="w-12 h-12 text-sm ring-2 ring-white/10" />
-                                                            <div className="absolute -bottom-2 -right-1 w-6 h-6 flex items-center justify-center rounded-full font-black text-xs border-2 border-[#0f172a]"
-                                                                style={{
-                                                                    background: i === 0 ? "#E2E8F0" : "#B45309",
-                                                                    color: i === 0 ? "#0f172a" : "#FFF"
-                                                                }}>
-                                                                {i + 2}
+                                        {topThree[0] && (
+                                            <div
+                                                className="relative z-10 rounded-2xl px-4 py-3.5"
+                                                style={{
+                                                    background: "linear-gradient(120deg, rgba(255,202,40,0.2), rgba(15,23,42,0.9) 52%, rgba(2,6,23,0.94))",
+                                                    border: "1px solid rgba(255,202,40,0.38)",
+                                                    boxShadow: "0 12px 26px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)",
+                                                }}
+                                            >
+                                                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300/75 to-transparent" />
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative shrink-0">
+                                                        <PlayerAvatar
+                                                            name={topThree[0].name}
+                                                            label={getMonogram(topThree[0].name, 2)}
+                                                            className="w-12 h-12 text-sm ring-2 ring-amber-300/45"
+                                                        />
+                                                        <span
+                                                            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black"
+                                                            style={{
+                                                                background: "linear-gradient(145deg, rgba(255,202,40,0.96), rgba(245,124,0,0.92))",
+                                                                border: "1px solid rgba(255,232,173,0.78)",
+                                                                color: "#1f2937",
+                                                            }}
+                                                        >
+                                                            1
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-[8px] font-black uppercase tracking-[0.2em] text-amber-200/90">Pole Position</div>
+                                                        <div className="text-[15px] font-black uppercase tracking-[0.05em] text-white truncate">{topThree[0].name}</div>
+                                                        <div className="mt-1.5 flex items-center gap-1.5">
+                                                            <span className="px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-[0.12em]"
+                                                                style={{ background: "rgba(15,23,42,0.7)", border: "1px solid rgba(148,163,184,0.28)", color: "rgba(226,232,240,0.88)" }}>
+                                                                WR {toWinRatePct(topThree[0])}%
+                                                            </span>
+                                                            <span className="px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-[0.12em]"
+                                                                style={{ background: "rgba(245,124,0,0.26)", border: "1px solid rgba(255,202,40,0.38)", color: "rgba(255,243,205,0.95)" }}>
+                                                                Rating {toRatingStr(topThree[0])}
+                                                            </span>
+                                                            <span className="text-[8px] font-black uppercase tracking-[0.1em] text-white/55 tabular-nums">
+                                                                {toNumber(topThree[0].w)}-{toNumber(topThree[0].l)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {topThree.length > 1 && (
+                                            <div className="relative z-10 mt-2 grid grid-cols-2 gap-2">
+                                                {topThree.slice(1).map((player, idx) => {
+                                                    const accent = idx === 0
+                                                        ? {
+                                                            bg: "linear-gradient(125deg, rgba(148,163,184,0.2), rgba(15,23,42,0.86))",
+                                                            border: "1px solid rgba(148,163,184,0.4)",
+                                                            rankBg: "rgba(148,163,184,0.92)",
+                                                            rankColor: "#0f172a",
+                                                        }
+                                                        : {
+                                                            bg: "linear-gradient(125deg, rgba(251,146,60,0.22), rgba(15,23,42,0.86))",
+                                                            border: "1px solid rgba(251,146,60,0.4)",
+                                                            rankBg: "rgba(251,146,60,0.92)",
+                                                            rankColor: "#111827",
+                                                        };
+                                                    return (
+                                                        <div
+                                                            key={player.name}
+                                                            className="rounded-2xl px-3 py-2.5"
+                                                            style={{
+                                                                background: accent.bg,
+                                                                border: accent.border,
+                                                                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+                                                            }}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <PlayerAvatar name={player.name} label={getMonogram(player.name, 2)} className="w-9 h-9 text-[10px]" />
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-white truncate">{player.name}</div>
+                                                                    <div className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/55 tabular-nums">
+                                                                        WR {toWinRatePct(player)}% · {toRatingStr(player)}
+                                                                    </div>
+                                                                </div>
+                                                                <span
+                                                                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black"
+                                                                    style={{ background: accent.rankBg, color: accent.rankColor }}
+                                                                >
+                                                                    {idx + 2}
+                                                                </span>
                                                             </div>
                                                         </div>
-                                                        <h3 className="text-sm font-bold text-white uppercase tracking-wide truncate w-full mb-0.5">{p.name}</h3>
-                                                        <div className="text-lg font-mono font-bold text-white/80 mb-0.5">{p.rating}</div>
-                                                        <div className="text-[9px] font-bold uppercase tracking-wider text-white/30">
-                                                            {Math.round(p.winRate * 100)}% · {p.w}W-{p.l}L
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )}
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </motion.div>
 
-                                    {/* ── List (4th+) ── */}
-                                    {globalLeaderboard.length > 3 && (
-                                        <div className="space-y-0.5 pb-24">
-                                            {/* Section header */}
-                                            <div className="flex items-center justify-between px-3 pb-1.5 pt-2">
-                                                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/25">
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.04 }}
+                                        className="relative rounded-[2rem] overflow-hidden flex-1 min-h-0 flex flex-col"
+                                        style={{
+                                            background: "linear-gradient(158deg, rgba(7,11,22,0.92), rgba(2,8,20,0.98) 58%, rgba(8,14,30,0.92))",
+                                            border: "1px solid rgba(120,132,156,0.24)",
+                                            boxShadow: "0 18px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1)",
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 pointer-events-none">
+                                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_0%,rgba(255,202,40,0.12),transparent_42%)]" />
+                                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_92%_100%,rgba(148,163,184,0.1),transparent_42%)]" />
+                                        </div>
+
+                                        <div
+                                            className="sticky top-0 z-20 px-4 py-3.5"
+                                            style={{
+                                                borderBottom: "1px solid rgba(120,132,156,0.2)",
+                                                background: "linear-gradient(92deg, rgba(255,202,40,0.13), rgba(15,23,42,0.92) 48%, rgba(148,163,184,0.12))",
+                                                backdropFilter: "blur(12px)",
+                                            }}
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span
+                                                    className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.2em]"
+                                                    style={{ color: "rgba(255,243,205,0.92)" }}
+                                                >
+                                                    <TrendingUp size={11} />
                                                     Global Rankings
                                                 </span>
-                                                <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full"
-                                                    style={{
-                                                        background: "rgba(255,255,255,0.06)",
-                                                        border: "1px solid rgba(255,255,255,0.1)",
-                                                        color: "rgba(255,255,255,0.3)",
-                                                    }}>
-                                                    {globalLeaderboard.length - 3}
-                                                </span>
-                                            </div>
-                                            {globalLeaderboard.slice(3).map((p, i) => (
-                                                <motion.div key={p.name}
-                                                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + (i * 0.04) }}
-                                                    className="flex items-center p-3 rounded-xl relative overflow-hidden"
-                                                    style={{
-                                                        background: i % 2 === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)",
-                                                        border: "1px solid rgba(255,255,255,0.04)",
-                                                    }}
-                                                >
-                                                    {/* Win rate progress bar (background) */}
-                                                    <div className="absolute inset-y-0 left-0 rounded-xl pointer-events-none"
+                                                <div className="flex items-center gap-1.5">
+                                                    <span
+                                                        className="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.13em]"
                                                         style={{
-                                                            width: `${Math.round(p.winRate * 100)}%`,
-                                                            background: "linear-gradient(90deg, rgba(255,202,40,0.04) 0%, rgba(255,109,0,0.02) 100%)",
-                                                        }} />
+                                                            background: "rgba(15,23,42,0.62)",
+                                                            border: "1px solid rgba(120,132,156,0.3)",
+                                                            color: "rgba(226,232,240,0.9)",
+                                                        }}
+                                                    >
+                                                        Players {leaderboard.length}
+                                                    </span>
+                                                    <span
+                                                        className="hidden sm:inline-flex px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.13em]"
+                                                        style={{
+                                                            background: "rgba(255,202,40,0.16)",
+                                                            border: "1px solid rgba(255,202,40,0.32)",
+                                                            color: "rgba(255,243,205,0.94)",
+                                                        }}
+                                                    >
+                                                        Avg WR {leaderboardAverageWinRate}%
+                                                    </span>
+                                                </div>
+                                            </div>
 
-                                                    <div className="w-7 text-center font-mono font-bold text-white/30 text-xs relative z-10">{i + 4}</div>
-                                                    <div className="relative z-10">
-                                                        <PlayerAvatar name={p.name} className="w-8 h-8 text-[10px] mr-3 ring-2 ring-white/10" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0 relative z-10">
-                                                        <div className="font-bold text-xs text-white uppercase tracking-wide truncate">{p.name}</div>
-                                                        <div className="text-[10px] text-white/30 font-mono">{p.w}W - {p.l}L · {Math.round(p.winRate * 100)}%</div>
-                                                    </div>
-                                                    <div className="font-mono font-bold text-sm text-white/70 relative z-10">{p.rating}</div>
-                                                </motion.div>
-                                            ))}
+                                            <div
+                                                className={`mt-3 grid ${rankingColumnLayout} gap-2 items-center text-[8px] font-black uppercase tracking-[0.16em]`}
+                                                style={{ color: "rgba(191,207,227,0.55)" }}
+                                            >
+                                                <span className="text-center">#</span>
+                                                <span>Player</span>
+                                                <span className="text-center">WR</span>
+                                                <span className="text-center">Rating</span>
+                                            </div>
                                         </div>
-                                    )}
+
+                                        <div
+                                            className="relative z-10 px-3 pb-3 flex-1 min-h-0 overflow-y-auto"
+                                            style={{
+                                                scrollbarWidth: "none",
+                                                WebkitOverflowScrolling: "touch",
+                                                touchAction: "pan-y",
+                                            }}
+                                        >
+                                            {remainingLeaderboard.length > 0 ? remainingLeaderboard.map((player, offsetIdx) => {
+                                                const rankIdx = offsetIdx + 3;
+                                                const wins = toNumber(player.w);
+                                                const losses = toNumber(player.l);
+                                                const played = wins + losses;
+                                                const winRatePct = toWinRatePct(player);
+                                                const rating = toRatingStr(player);
+
+                                                return (
+                                                    <motion.div
+                                                        key={player.name}
+                                                        layout
+                                                        initial={{ opacity: 0, y: 6 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ delay: offsetIdx * 0.015 }}
+                                                        className="relative rounded-2xl mt-2 overflow-hidden"
+                                                        style={{
+                                                            border: "1px solid rgba(100,116,139,0.3)",
+                                                            background: "linear-gradient(116deg, rgba(15,23,42,0.7), rgba(2,6,23,0.84) 56%, rgba(15,23,42,0.72))",
+                                                            boxShadow: "0 10px 22px rgba(2,6,23,0.34), inset 0 1px 0 rgba(255,255,255,0.08)",
+                                                        }}
+                                                    >
+                                                        <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: "linear-gradient(180deg, rgba(255,202,40,0.9), rgba(245,124,0,0.68))" }} />
+                                                        <div
+                                                            className="absolute inset-y-0 left-0 pointer-events-none"
+                                                            style={{ width: `${winRatePct}%`, background: "linear-gradient(90deg, rgba(255,202,40,0.1), rgba(255,202,40,0.02))" }}
+                                                        />
+
+                                                        <div className={`relative z-10 px-3 py-3 grid ${rankingColumnLayout} gap-2 items-center`}>
+                                                            <div className="flex justify-center">
+                                                                <span
+                                                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-black tabular-nums"
+                                                                    style={{
+                                                                        background: "rgba(30,41,59,0.74)",
+                                                                        border: "1px solid rgba(100,116,139,0.32)",
+                                                                        color: "rgba(203,213,225,0.9)",
+                                                                    }}
+                                                                >
+                                                                    {rankIdx + 1}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="min-w-0 flex items-center gap-2">
+                                                                <PlayerAvatar
+                                                                    name={player.name}
+                                                                    label={getMonogram(player.name, 2)}
+                                                                    className="w-7 h-7 text-[10px] ring-2 ring-white/12"
+                                                                />
+                                                                <div className="min-w-0">
+                                                                    <div className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.08em] text-white truncate">
+                                                                        {player.name}
+                                                                    </div>
+                                                                    <div className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/42 tabular-nums">
+                                                                        {wins}-{losses} · {played}G
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <span className="text-center text-[11px] font-black tabular-nums text-cyan-300">
+                                                                {winRatePct}%
+                                                            </span>
+                                                            <span className="text-center text-[11px] font-black tabular-nums text-amber-100">
+                                                                {rating}
+                                                            </span>
+                                                        </div>
+                                                    </motion.div>
+                                                );
+                                            }) : (
+                                                <div className="py-12 text-center">
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+                                                        Top 3 Displayed In HUD
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div
+                                            className="px-4 py-2 text-[8px] font-bold uppercase tracking-[0.14em]"
+                                            style={{ color: "rgba(148,163,184,0.64)", borderTop: "1px solid rgba(120,132,156,0.18)" }}
+                                        >
+                                            Total Recorded Games {leaderboardTotalGames}
+                                        </div>
+                                    </motion.div>
                                 </>
                             ) : (
                                 <div className="py-20 text-center">
-                                    <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
-                                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                                        <Medal size={24} style={{ color: "rgba(255,255,255,0.2)" }} />
+                                    <div
+                                        className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
+                                        style={{
+                                            background: "linear-gradient(145deg, rgba(15,23,42,0.72), rgba(2,6,23,0.86))",
+                                            border: "1px solid rgba(100,116,139,0.3)",
+                                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1), 0 12px 26px rgba(0,0,0,0.35)",
+                                        }}
+                                    >
+                                        <Medal size={24} style={{ color: "rgba(148,163,184,0.6)" }} />
                                     </div>
-                                    <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>
+                                    <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.5)" }}>
                                         Global Rankings Coming Soon
                                     </p>
                                 </div>
@@ -395,6 +686,7 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
     // Liquid ripple state
     const [cardRipples, setCardRipples] = React.useState([]);
     const [delRipples, setDelRipples] = React.useState([]);
+    const [pressSweepId, setPressSweepId] = React.useState(0);
 
     const spawnRipple = (e, setter) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -441,22 +733,10 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
     // Firebase orange: #FF6D00 / active emerald / winner gold
     const accentColor = isWinner ? "#FFCA28" : isActive ? "#34d399" : "#FF6D00";
     const accentRgb = isWinner ? "255,202,40" : isActive ? "52,211,153" : "255,109,0";
-    const cardBg = isWinner
-        ? `rgba(255,202,40,0.06)`
-        : isActive
-            ? `rgba(52,211,153,0.05)`
-            : `rgba(255,109,0,0.05)`;
-    const cardBorder = isWinner
-        ? `1px solid rgba(255,202,40,0.22)`
-        : isActive
-            ? `1px solid rgba(52,211,153,0.18)`
-            : `1px solid rgba(255,109,0,0.18)`;
-    // Only inset shadows to avoid clipping issues
-    const cardShadow = isWinner
-        ? `inset 0 1px 0 rgba(255,202,40,0.18), inset 0 -1px 0 rgba(0,0,0,0.25)`
-        : isActive
-            ? `inset 0 1px 0 rgba(52,211,153,0.15), inset 0 -1px 0 rgba(0,0,0,0.25)`
-            : `inset 0 1px 0 rgba(255,109,0,0.12), inset 0 -1px 0 rgba(0,0,0,0.25)`;
+    const cardBg = "linear-gradient(132deg, rgba(8,12,26,0.94), rgba(9,18,38,0.93) 58%, rgba(15,23,42,0.92) 100%)";
+    const cardBorder = "1px solid rgba(148,163,184,0.24)";
+    const cardShadow = "0 8px 16px rgba(2,6,23,0.26), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -10px 18px rgba(2,6,23,0.22)";
+    const cardHoverShadow = `0 12px 24px rgba(2,6,23,0.34), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -10px 18px rgba(2,6,23,0.24), 0 0 0 1px rgba(${accentRgb},0.16)`;
 
     // ─── Icon for the status chip ────────────────────────────────────────
     const StatusIcon = () => isWinner
@@ -468,6 +748,10 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                 : <Trophy size={13} style={{ color: "#FF6D00" }} />;
 
     const statusLabel = isActive ? "Live" : isDraft ? "Draft" : "Done";
+    const formatLabel = formatEventType(t.format);
+    const pointsLabel = `TO ${Math.max(1, toNumber(t.pointsToWin, 11))}`;
+    const eventDate = formatEventDate(t.createdAt);
+    const eventAge = formatEventAge(t.createdAt);
 
     return (
         /* Outer li: opacity only — NO overflow:hidden so shadows can breathe */
@@ -511,7 +795,7 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                     triggerHaptic(60);
                                     setDeleteModal({ show: true, id: t.id, snapBack });
                                 }}
-                                className="h-[calc(100%-8px)] rounded-2xl flex items-center justify-center relative overflow-hidden"
+                                className="neo-btn neo-btn-danger h-[calc(100%-8px)] rounded-2xl flex items-center justify-center relative overflow-hidden"
                             >
                                 {/* inner sheen */}
                                 <div className="absolute inset-x-0 top-0 h-[40%] rounded-t-2xl"
@@ -563,7 +847,9 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                 snapBack();
                             }
                         }}
-                        whileTap={!isAdmin ? { scale: 0.985 } : undefined}
+                        whileHover={{ y: -1.5, boxShadow: cardHoverShadow, borderColor: "rgba(148,163,184,0.34)" }}
+                        whileTap={{ scale: 0.976 }}
+                        onTapStart={() => setPressSweepId((prev) => prev + 1)}
                         onClick={(e) => {
                             if (!wasDragged.current) {
                                 spawnRipple(e, setCardRipples);
@@ -571,27 +857,21 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                 setActiveTournamentId(t.id);
                             }
                         }}
-                        className="relative flex items-center gap-3.5 px-4 py-3.5 rounded-3xl cursor-pointer overflow-hidden"
+                        className="relative grid grid-cols-[44px_minmax(0,1fr)_96px] sm:grid-cols-[44px_minmax(0,1fr)_106px] items-stretch gap-2.5 sm:gap-3 px-4 py-3 rounded-[1.85rem] cursor-pointer overflow-hidden h-[108px]"
                         style={{
                             x,
                             zIndex: 2,
-                            minHeight: 76,
                             background: cardBg,
                             border: cardBorder,
-                            backdropFilter: "blur(28px) saturate(200%) brightness(1.08)",
-                            WebkitBackdropFilter: "blur(28px) saturate(200%) brightness(1.08)",
+                            backdropFilter: "blur(26px) saturate(190%) brightness(1.06)",
+                            WebkitBackdropFilter: "blur(26px) saturate(190%) brightness(1.06)",
                             boxShadow: cardShadow,
                         }}
                     >
-                        {/* ─ Noise texture overlay for tactile glass feel ─ */}
-                        <div className="absolute inset-0 rounded-2xl pointer-events-none z-0"
-                            style={{
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
-                                backgroundSize: "180px 180px",
-                                opacity: 0.028,
-                                mixBlendMode: "overlay",
-                            }}
-                        />
+                        <div className="absolute inset-0 pointer-events-none z-0">
+                            <div className="absolute -left-12 -top-10 w-40 h-24 rounded-full blur-2xl" style={{ background: `rgba(${accentRgb},0.09)` }} />
+                            <div className="absolute -right-12 -bottom-14 w-40 h-24 rounded-full blur-2xl" style={{ background: "rgba(59,130,246,0.09)" }} />
+                        </div>
 
                         {/* ─ Liquid ripples (card click) ─ */}
                         {cardRipples.map(r => (
@@ -599,47 +879,55 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                 style={{ left: r.x, top: r.y, width: r.size, height: r.size }} />
                         ))}
 
-                        {/* ─ Top-edge refraction highlight ─ */}
-                        <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl pointer-events-none z-10"
-                            style={{ background: `linear-gradient(90deg, transparent 0%, rgba(${accentRgb},0.5) 40%, rgba(255,255,255,0.4) 60%, transparent 100%)` }} />
-
-                        {/* ─ Inner top sheen (glass thickness illusion) ─ */}
-                        <div className="absolute inset-x-0 top-0 h-8 rounded-t-2xl pointer-events-none z-0"
-                            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 100%)" }} />
-
-                        {/* ─ Winner left-accent bar ─ */}
-                        {isWinner && (
-                            <div className="absolute left-0 inset-y-3 w-[3px] rounded-full z-10"
-                                style={{ background: `linear-gradient(180deg, ${accentColor} 0%, rgba(255,202,40,0) 100%)` }} />
+                        {pressSweepId > 0 && (
+                            <motion.span
+                                key={pressSweepId}
+                                className="absolute inset-y-0 -left-1/3 w-1/3 pointer-events-none z-20"
+                                initial={{ x: "-130%", opacity: 0 }}
+                                animate={{ x: "430%", opacity: [0, 0.55, 0] }}
+                                transition={{ duration: 0.36, ease: "easeOut" }}
+                                style={{
+                                    background: "linear-gradient(100deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
+                                    filter: "blur(2px)",
+                                }}
+                            />
                         )}
 
-                        {/* ─ Status icon chip (liquid glass) ─ */}
-                        <div className="flex-none w-10 h-10 rounded-xl flex items-center justify-center relative overflow-hidden z-10"
+                        {/* ─ Top-edge refraction highlight ─ */}
+                        <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl pointer-events-none z-10"
+                            style={{ background: "linear-gradient(90deg, transparent 0%, rgba(226,232,240,0.24) 52%, transparent 100%)" }} />
+
+                        <div className="absolute inset-x-0 top-0 h-9 rounded-t-2xl pointer-events-none z-0"
+                            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.09) 0%, transparent 100%)" }} />
+
+                        {/* ─ Status icon pod ─ */}
+                        <div className="w-11 h-11 rounded-[14px] flex items-center justify-center relative overflow-hidden z-10 self-center justify-self-center"
                             style={{
                                 background: isWinner
-                                    ? "rgba(255,202,40,0.10)"
+                                    ? "linear-gradient(145deg, rgba(255,202,40,0.18), rgba(245,124,0,0.1))"
                                     : isActive
-                                        ? "rgba(52,211,153,0.10)"
-                                        : "rgba(255,109,0,0.10)",
-                                border: `1px solid rgba(${accentRgb},0.22)`,
-                                backdropFilter: "blur(12px)",
-                                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 8px rgba(0,0,0,0.2)`,
+                                        ? "linear-gradient(145deg, rgba(52,211,153,0.18), rgba(16,185,129,0.1))"
+                                        : "linear-gradient(145deg, rgba(255,109,0,0.18), rgba(251,146,60,0.1))",
+                                border: `1px solid rgba(${accentRgb},0.34)`,
+                                backdropFilter: "blur(10px)",
+                                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 16px rgba(2,6,23,0.35)",
                             }}
                         >
-                            {/* chip inner sheen */}
                             <div className="absolute inset-x-0 top-0 h-1/2 rounded-t-xl"
-                                style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.12) 0%,transparent 100%)" }} />
+                                style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.16) 0%,transparent 100%)" }} />
                             <StatusIcon />
                         </div>
 
                         {/* ─ Main text content ─ */}
-                        <div className="flex-1 min-w-0 z-10">
-                            <h3 className={`font-bold text-[13px] tracking-widest uppercase leading-snug truncate mb-1 ${isWinner ? "text-amber-200" : "text-white"}`}>
-                                {t.name}
-                            </h3>
-                            <div className="flex items-center gap-2">
-                                {/* Glass status badge */}
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest relative overflow-hidden"
+                        <div className="min-w-0 z-10 h-full flex flex-col justify-between py-[1px]">
+                            <div className="flex items-start justify-between gap-2">
+                                <h3 className={`font-black text-[14px] tracking-[0.06em] uppercase leading-snug truncate ${isWinner ? "text-amber-200" : "text-white"}`}>
+                                    {t.name}
+                                </h3>
+                            </div>
+
+                            <div className="flex items-center gap-1 min-w-0 whitespace-nowrap overflow-hidden">
+                                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest relative overflow-hidden"
                                     style={{
                                         background: `rgba(${accentRgb},0.12)`,
                                         border: `1px solid rgba(${accentRgb},0.22)`,
@@ -652,37 +940,80 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                         style={{ backgroundColor: isActive ? undefined : accentColor, opacity: 0.9 }} />
                                     {statusLabel}
                                 </span>
-                                <span className="text-[8px] text-white/15 font-bold uppercase tracking-wider tabular-nums">
-                                    {new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                <span
+                                    className="min-w-0 max-w-[88px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-wider overflow-hidden"
+                                    style={{
+                                        background: "rgba(148,163,184,0.12)",
+                                        border: "1px solid rgba(148,163,184,0.24)",
+                                        color: "rgba(226,232,240,0.82)",
+                                    }}
+                                >
+                                    <LayoutGrid size={8} />
+                                    <span className="truncate">{formatLabel}</span>
                                 </span>
-                                {isWinner && (
-                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black uppercase tracking-wider text-amber-300/70 truncate max-w-[80px]">
-                                        <Crown size={8} className="text-amber-400 flex-none" />
-                                        {t.winner}
+                                <span
+                                    className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-wider"
+                                    style={{
+                                        background: "rgba(255,202,40,0.12)",
+                                        border: "1px solid rgba(255,202,40,0.26)",
+                                        color: "rgba(255,236,170,0.9)",
+                                    }}
+                                >
+                                    {pointsLabel}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 min-w-0 whitespace-nowrap overflow-hidden">
+                                <span className="inline-flex items-center gap-1 text-[7px] font-bold uppercase tracking-[0.12em]"
+                                    style={{ color: "rgba(191,207,227,0.5)" }}>
+                                    <CalendarDays size={9} />
+                                    {eventDate}
+                                </span>
+                                {eventAge && (
+                                    <span
+                                        className="text-[7px] font-black uppercase tracking-[0.11em] shrink-0"
+                                        style={{ color: "rgba(148,163,184,0.55)" }}
+                                    >
+                                        {eventAge}
                                     </span>
                                 )}
                             </div>
                         </div>
 
-                        {/* ─ Player avatars ─ */}
-                        <div className="flex-none flex items-center z-10">
-                            <div className="flex -space-x-2">
-                                {playersPreview.slice(0, 4).map((p, i) => (
-                                    <div key={i} className="rounded-full ring-2 ring-white/10">
-                                        <PlayerAvatar name={p} className="w-6 h-6 text-[8px]" />
-                                    </div>
-                                ))}
+                        {/* ─ Right rail (avatars + open cue) ─ */}
+                        <div className="w-[96px] sm:w-[106px] h-full flex flex-col items-end justify-between py-[1px] z-10">
+                            <div className="flex items-center justify-end gap-2 min-w-0">
+                                <div className="flex -space-x-1.5">
+                                    {playersPreview.slice(0, 3).map((p, i) => (
+                                        <div key={i} className="rounded-full ring-2 ring-slate-950/60">
+                                            <PlayerAvatar name={p} className="w-6 h-6 sm:w-7 sm:h-7 text-[8px] sm:text-[9px]" />
+                                        </div>
+                                    ))}
+                                    {playerCount > 3 && (
+                                        <span
+                                            className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full text-[8px] sm:text-[9px] font-black"
+                                            style={{
+                                                background: "rgba(15,23,42,0.82)",
+                                                border: "1px solid rgba(148,163,184,0.28)",
+                                                color: "rgba(226,232,240,0.86)",
+                                            }}
+                                        >
+                                            +{playerCount - 3}
+                                        </span>
+                                    )}
+                                    {playerCount === 0 && (
+                                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full"
+                                            style={{ background: "rgba(15,23,42,0.72)", border: "1px solid rgba(148,163,184,0.28)", color: "rgba(148,163,184,0.72)" }}>
+                                            <Users size={9} />
+                                        </span>
+                                    )}
+                                </div>
+                                <ChevronRight size={14} style={{ color: "rgba(226,232,240,0.5)" }} />
                             </div>
-                            {playerCount > 4 && (
-                                <span className="ml-1.5 text-[8px] font-black uppercase tracking-wider text-white/30">
-                                    +{playerCount - 4}
-                                </span>
-                            )}
-                            {playerCount === 0 && (
-                                <span className="text-[8px] font-bold uppercase tracking-widest text-white/20 flex items-center gap-1">
-                                    <Users size={9} /> 0
-                                </span>
-                            )}
+
+                            <span className="text-[9px] font-black uppercase tracking-[0.1em] text-right" style={{ color: "rgba(226,232,240,0.72)" }}>
+                                {playerCount} Players
+                            </span>
                         </div>
                     </motion.div>
                 </div>
