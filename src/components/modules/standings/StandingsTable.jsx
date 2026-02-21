@@ -34,6 +34,7 @@ export default function StandingsTable({
     qualifyCount: qCount = 2,
     isTournamentOver,
     enableInternalScroll = false,
+    footerInset = 0,
 }) {
     const panelRef = React.useRef(null);
     const [viewportHeight, setViewportHeight] = React.useState(() => getViewportHeight());
@@ -74,9 +75,12 @@ export default function StandingsTable({
         }
 
         const top = panelRef.current.getBoundingClientRect().top;
-        const nextHeight = Math.max(320, Math.round(Math.max(0, viewportHeight - top - 8)));
+        const nextHeight = Math.max(
+            320,
+            Math.round(Math.max(0, viewportHeight - top - Math.max(0, footerInset) - 8)),
+        );
         setPanelHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-    }, [enableInternalScroll, viewportHeight, standings.length]);
+    }, [enableInternalScroll, viewportHeight, standings.length, footerInset]);
 
     const knockoutLabel = qCount >= 4
         ? "Generate Semis + Final"

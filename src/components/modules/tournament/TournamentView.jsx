@@ -18,6 +18,12 @@ import LiquidButton from "../../common/LiquidButton";
 import LiquidTabBar from "../../common/LiquidTabBar";
 import GlassHeader from "../../common/GlassHeader";
 
+const getViewportHeight = () => {
+    if (typeof window === "undefined") return 0;
+    if (window.visualViewport?.height) return window.visualViewport.height;
+    return window.innerHeight || document.documentElement?.clientHeight || 0;
+};
+
 // ─── Confetti Particle ────────────────────────────────────────────────────────
 const CONFETTI_COLORS = ["#FFCA28", "#F57C00", "#4ADE80", "#818CF8", "#F472B6", "#38BDF8"];
 const seeded = (index, salt) => {
@@ -110,12 +116,17 @@ export default function TournamentView({
     const tabScrollRef = React.useRef({ matches: 0, standings: 0 });
     const previousTabRef = React.useRef("matches");
     const viewHeaderRef = React.useRef(null);
+    const bottomTabsRef = React.useRef(null);
     const [viewHeaderHeight, setViewHeaderHeight] = useState(0);
+    const [mobileFooterInset, setMobileFooterInset] = useState(() => (
+        typeof window !== "undefined" && window.innerWidth < 768 ? 104 : 0
+    ));
 
     const isSetupMode = !data || data.status === "draft";
     const isStandingsTabActive = !isSetupMode && activeTab === "standings";
     const standingsStickyTop = Math.max(88, viewHeaderHeight + 10);
     const tournamentTitle = String(data?.name || "Tournament").trim() || "Tournament";
+    const mobileTabBottomOffset = "max(env(safe-area-inset-bottom, 0px), 10px)";
 
     // Derive the qualifier count for standings display
     const qCount = useMemo(() => qualifyCount(standings.length), [standings.length]);
@@ -188,6 +199,57 @@ export default function TournamentView({
         observer.observe(element);
         return () => observer.disconnect();
     }, [isSetupMode, isAdmin, data?.name]);
+
+    React.useLayoutEffect(() => {
+        if (typeof window === "undefined" || isSetupMode) {
+            setMobileFooterInset(0);
+            return undefined;
+        }
+
+        let frame = 0;
+        let footerObserver = null;
+        const syncFooterInset = () => {
+            if (frame) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+                const footerEl = bottomTabsRef.current;
+                if (!footerEl) {
+                    setMobileFooterInset((prev) => (prev === 0 ? prev : 0));
+                    return;
+                }
+
+                const rect = footerEl.getBoundingClientRect();
+                const viewportHeight = getViewportHeight();
+                const overlap = Math.max(0, viewportHeight - rect.top);
+                const nextInset = Math.ceil(overlap);
+
+                setMobileFooterInset((prev) => (
+                    Math.abs(prev - nextInset) < 1 ? prev : nextInset
+                ));
+            });
+        };
+
+        syncFooterInset();
+
+        if (bottomTabsRef.current) {
+            footerObserver = new ResizeObserver(syncFooterInset);
+            footerObserver.observe(bottomTabsRef.current);
+        }
+
+        window.addEventListener("resize", syncFooterInset);
+        window.addEventListener("orientationchange", syncFooterInset);
+        window.visualViewport?.addEventListener("resize", syncFooterInset);
+        window.visualViewport?.addEventListener("scroll", syncFooterInset);
+
+        return () => {
+            window.removeEventListener("resize", syncFooterInset);
+            window.removeEventListener("orientationchange", syncFooterInset);
+            window.visualViewport?.removeEventListener("resize", syncFooterInset);
+            window.visualViewport?.removeEventListener("scroll", syncFooterInset);
+            footerObserver?.disconnect();
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, [isSetupMode, activeTab]);
 
 
     return (
@@ -339,7 +401,12 @@ export default function TournamentView({
                     touchAction: "pan-y",
                     scrollbarWidth: "none"
                 }}>
-                <div className={`p-5 ${isStandingsTabActive ? "pb-28 h-full min-h-0" : "pb-36"}`}>
+                <div
+                    className={`p-5 ${isStandingsTabActive ? "h-full min-h-0" : "pb-36"}`}
+                    style={isStandingsTabActive
+                        ? { paddingBottom: `${Math.max(112, mobileFooterInset + 10)}px` }
+                        : undefined}
+                >
                     {isSetupMode ? (
                         <Setup
                             data={data}
@@ -410,6 +477,7 @@ export default function TournamentView({
                                                     qualifyCount={qCount}
                                                     isTournamentOver={isTournamentOver}
                                                     enableInternalScroll={isStandingsTabActive}
+                                                    footerInset={mobileFooterInset}
                                                 />
                                             </div>
                                         </motion.div>
@@ -424,13 +492,17 @@ export default function TournamentView({
 
             {/* BOTTOM TAB BAR - FIXED GLASS */}
             {!isSetupMode && (
-                <div className="md:hidden fixed bottom-0 inset-x-0 z-50 pb-8 pt-4 px-6 rounded-t-3xl"
+                <div
+                    ref={bottomTabsRef}
+                    className="md:hidden fixed bottom-0 inset-x-0 z-50 pt-4 px-6 rounded-t-3xl"
                     style={{
+                        bottom: mobileTabBottomOffset,
                         background: "rgba(3,7,18,0.7)",
                         backdropFilter: "blur(20px) saturate(180%)",
                         WebkitBackdropFilter: "blur(20px) saturate(180%)",
                         borderTop: "1px solid rgba(255,255,255,0.06)",
                         boxShadow: "0 -4px 30px rgba(0,0,0,0.5)",
+                        paddingBottom: "10px",
                     }}>
                     <LiquidTabBar
                         tabs={[
