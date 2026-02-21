@@ -70,6 +70,12 @@ const toWinRatePct = (player) => {
     return Math.max(0, Math.min(100, Math.round(winRate * 100)));
 };
 
+const getViewportHeight = () => {
+    if (typeof window === "undefined") return 0;
+    if (window.visualViewport?.height) return window.visualViewport.height;
+    return window.innerHeight || document.documentElement?.clientHeight || 0;
+};
+
 export default function TournamentHub({
     tournaments,
     setActiveTournamentId,
@@ -104,6 +110,7 @@ export default function TournamentHub({
         return initialCount;
     });
     const [rankingsListScrollEnabled, setRankingsListScrollEnabled] = React.useState(false);
+    const [viewportHeight, setViewportHeight] = React.useState(() => getViewportHeight());
     const isIOSWebKit = React.useMemo(() => {
         if (typeof navigator === "undefined") return false;
         const ua = navigator.userAgent || "";
@@ -137,7 +144,7 @@ export default function TournamentHub({
     const visibleTournaments = sortedTournaments.slice(0, visibleEventsCount);
     const hasMoreEvents = visibleEventsCount < sortedTournaments.length;
     const canObserveLoadMore = typeof window !== "undefined" && "IntersectionObserver" in window;
-    const rankingsPanelHeight = `calc(100svh - ${Math.max(0, hubHeaderHeight)}px - 20px)`;
+    const rankingsPanelHeightPx = Math.max(340, Math.round(Math.max(0, viewportHeight) - Math.max(0, hubHeaderHeight) - 20));
     const showEventsStencil = isTournamentsLoading && sortedTournaments.length === 0;
 
     const loadMoreEvents = React.useCallback(() => {
@@ -163,6 +170,34 @@ export default function TournamentHub({
         observer.observe(element);
         return () => observer.disconnect();
     }, [hubTab]);
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return undefined;
+
+        let frame = 0;
+        const syncViewportHeight = () => {
+            if (frame) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+                const nextHeight = getViewportHeight();
+                setViewportHeight((prev) => (Math.abs(prev - nextHeight) < 0.5 ? prev : nextHeight));
+            });
+        };
+
+        syncViewportHeight();
+        window.addEventListener("resize", syncViewportHeight);
+        window.addEventListener("orientationchange", syncViewportHeight);
+        window.visualViewport?.addEventListener("resize", syncViewportHeight);
+        window.visualViewport?.addEventListener("scroll", syncViewportHeight);
+
+        return () => {
+            window.removeEventListener("resize", syncViewportHeight);
+            window.removeEventListener("orientationchange", syncViewportHeight);
+            window.visualViewport?.removeEventListener("resize", syncViewportHeight);
+            window.visualViewport?.removeEventListener("scroll", syncViewportHeight);
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, []);
 
     React.useEffect(() => {
         setVisibleEventsCount((prev) => {
@@ -664,7 +699,7 @@ export default function TournamentHub({
                                             background: "linear-gradient(158deg, rgba(7,11,22,0.92), rgba(2,8,20,0.98) 58%, rgba(8,14,30,0.92))",
                                             border: "1px solid rgba(120,132,156,0.24)",
                                             boxShadow: "0 18px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1)",
-                                            height: rankingsPanelHeight,
+                                            height: `${rankingsPanelHeightPx}px`,
                                             minHeight: "340px",
                                         }}
                                     >
@@ -726,7 +761,7 @@ export default function TournamentHub({
 
                                         <div
                                             ref={rankingsListRef}
-                                            className="relative z-10 px-3 pb-3 flex-1 min-h-0 overflow-y-auto"
+                                            className="relative z-10 px-3 pb-14 flex-1 min-h-0 overflow-y-auto"
                                             style={{
                                                 overflowY: rankingsListScrollEnabled ? "auto" : "hidden",
                                                 pointerEvents: rankingsListScrollEnabled ? "auto" : "none",
@@ -812,8 +847,13 @@ export default function TournamentHub({
                                         </div>
 
                                         <div
-                                            className="px-4 py-2 text-[8px] font-bold uppercase tracking-[0.14em]"
-                                            style={{ color: "rgba(148,163,184,0.64)", borderTop: "1px solid rgba(120,132,156,0.18)" }}
+                                            className="sticky bottom-0 z-20 px-4 py-2 text-[8px] font-bold uppercase tracking-[0.14em]"
+                                            style={{
+                                                color: "rgba(148,163,184,0.72)",
+                                                borderTop: "1px solid rgba(120,132,156,0.22)",
+                                                background: "linear-gradient(180deg, rgba(2,6,23,0.2), rgba(2,6,23,0.92) 60%, rgba(2,6,23,0.98))",
+                                                paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)"
+                                            }}
                                         >
                                             Total Recorded Games {leaderboardTotalGames}
                                         </div>
