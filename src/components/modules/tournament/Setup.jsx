@@ -11,22 +11,28 @@ import { WIN_TARGET_OPTIONS, normalizeWinTarget } from "../../../utils/scoringRu
 
 // ── MEMOIZED COMPONENTS ──
 const DECK_ROW_HEIGHT = 72;
-const DECK_OVERSCAN = 8;
+const DECK_OVERSCAN = 12;
 
-const UnifiedDeckRow = React.memo(({ playerName, isDrafted, onToggle }) => (
+const UnifiedDeckRow = React.memo(({ playerName, isDrafted, onToggle, perfMode = false }) => (
     <div
-        className="neo-btn h-16 w-full px-3.5 rounded-2xl flex items-center gap-3 relative overflow-hidden"
+        className={`${perfMode ? "" : "neo-btn"} h-16 w-full px-3.5 rounded-2xl flex items-center gap-3 relative overflow-hidden`}
         style={{
-            background: isDrafted
-                ? "linear-gradient(145deg, rgba(255,202,40,0.2), rgba(245,124,0,0.14) 55%, rgba(15,23,42,0.32))"
-                : "linear-gradient(145deg, rgba(148,163,184,0.14), rgba(30,41,59,0.34) 55%, rgba(15,23,42,0.4))",
+            background: perfMode
+                ? (isDrafted
+                    ? "linear-gradient(145deg, rgba(255,202,40,0.14), rgba(245,124,0,0.08))"
+                    : "rgba(15,23,42,0.56)")
+                : (isDrafted
+                    ? "linear-gradient(145deg, rgba(255,202,40,0.2), rgba(245,124,0,0.14) 55%, rgba(15,23,42,0.32))"
+                    : "linear-gradient(145deg, rgba(148,163,184,0.14), rgba(30,41,59,0.34) 55%, rgba(15,23,42,0.4))"),
             border: isDrafted ? "1px solid rgba(255,202,40,0.3)" : "1px solid rgba(148,163,184,0.3)",
-            boxShadow: isDrafted
-                ? "0 12px 24px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px rgba(255,202,40,0.12)"
-                : "0 12px 24px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.14)"
+            boxShadow: perfMode
+                ? "none"
+                : (isDrafted
+                    ? "0 12px 24px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px rgba(255,202,40,0.12)"
+                    : "0 12px 24px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.14)")
         }}
     >
-        <div className="neo-gloss-sweep opacity-35" />
+        {!perfMode && <div className="absolute inset-x-0 top-0 h-[45%] pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.14), transparent)" }} />}
         <PlayerAvatar
             name={playerName}
             className={`w-8 h-8 text-[9px] shrink-0 ${isDrafted ? "ring-2 ring-amber-300/50" : "ring-1 ring-slate-200/35"}`}
@@ -43,18 +49,24 @@ const UnifiedDeckRow = React.memo(({ playerName, isDrafted, onToggle }) => (
         <button
             type="button"
             onClick={() => onToggle(playerName, !isDrafted)}
-            className="neo-btn neo-btn-icon h-8 px-3 rounded-full text-[8px] font-black uppercase tracking-[0.14em] flex items-center gap-1.5 shrink-0"
-            style={isDrafted
+            className={`${perfMode ? "" : "neo-btn neo-btn-icon"} h-8 px-3 rounded-full text-[8px] font-black uppercase tracking-[0.14em] flex items-center gap-1.5 shrink-0`}
+            style={perfMode
                 ? {
                     background: "rgba(2,6,23,0.52)",
-                    border: "1px solid rgba(255,202,40,0.3)",
-                    color: "rgba(255,232,173,0.9)"
+                    border: isDrafted ? "1px solid rgba(255,202,40,0.28)" : "1px solid rgba(148,163,184,0.28)",
+                    color: isDrafted ? "rgba(255,232,173,0.9)" : "rgba(226,232,240,0.9)"
                 }
-                : {
-                    background: "rgba(2,6,23,0.52)",
-                    border: "1px solid rgba(148,163,184,0.34)",
-                    color: "rgba(226,232,240,0.9)"
-                }
+                : (isDrafted
+                    ? {
+                        background: "rgba(2,6,23,0.52)",
+                        border: "1px solid rgba(255,202,40,0.3)",
+                        color: "rgba(255,232,173,0.9)"
+                    }
+                    : {
+                        background: "rgba(2,6,23,0.52)",
+                        border: "1px solid rgba(148,163,184,0.34)",
+                        color: "rgba(226,232,240,0.9)"
+                    })
             }
         >
             {isDrafted ? <RotateCcw size={10} /> : <Plus size={10} />}
@@ -97,6 +109,16 @@ export default function Setup({
     const [deckScrollTop, setDeckScrollTop] = useState(0);
     const [deckViewportHeight, setDeckViewportHeight] = useState(420);
     const deckViewportRef = React.useRef(null);
+    const deckRafRef = React.useRef(0);
+    const deckPendingScrollTopRef = React.useRef(0);
+    const lastDeckStartIndexRef = React.useRef(0);
+    const isIOSWebKit = React.useMemo(() => {
+        if (typeof navigator === "undefined") return false;
+        const ua = navigator.userAgent || "";
+        const isiOSDevice = /iP(hone|ad|od)/i.test(ua);
+        const isTouchMac = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+        return isiOSDevice || isTouchMac;
+    }, []);
 
     // Auto-dismiss toast
     React.useEffect(() => {
@@ -149,6 +171,7 @@ export default function Setup({
     const searchQuery = playerSearch.trim().toLowerCase();
     const hasRosterPlayers = allPlayers.length > 0;
     const isSearchActive = searchQuery.length >= 2;
+    const shouldVirtualizeDeck = !isIOSWebKit || allPlayers.length > 60;
     const deckBasePlayers = React.useMemo(() => {
         if (playerDeckTab === "drafted") return allPlayers.filter((player) => draftedSet.has(player));
         if (playerDeckTab === "bench") return benchedPlayers;
@@ -160,13 +183,21 @@ export default function Setup({
     }, [deckBasePlayers, isSearchActive, searchQuery]);
 
     const deckTotalRows = filteredDeckPlayers.length;
-    const deckVisibleCount = Math.ceil(deckViewportHeight / DECK_ROW_HEIGHT) + DECK_OVERSCAN * 2;
-    const deckStartIndex = Math.max(0, Math.floor(deckScrollTop / DECK_ROW_HEIGHT) - DECK_OVERSCAN);
-    const deckEndIndex = Math.min(deckTotalRows, deckStartIndex + deckVisibleCount);
+    const deckVisibleCount = shouldVirtualizeDeck
+        ? Math.ceil(deckViewportHeight / DECK_ROW_HEIGHT) + DECK_OVERSCAN * 2
+        : deckTotalRows;
+    const deckStartIndex = shouldVirtualizeDeck
+        ? Math.max(0, Math.floor(deckScrollTop / DECK_ROW_HEIGHT) - DECK_OVERSCAN)
+        : 0;
+    const deckEndIndex = shouldVirtualizeDeck
+        ? Math.min(deckTotalRows, deckStartIndex + deckVisibleCount)
+        : deckTotalRows;
     const visibleDeckPlayers = React.useMemo(() =>
         filteredDeckPlayers.slice(deckStartIndex, deckEndIndex),
         [filteredDeckPlayers, deckStartIndex, deckEndIndex]);
-    const deckInnerHeight = deckTotalRows * DECK_ROW_HEIGHT;
+    const deckInnerHeight = shouldVirtualizeDeck ? (deckTotalRows * DECK_ROW_HEIGHT) : 0;
+    const deckTopSpacer = deckStartIndex * DECK_ROW_HEIGHT;
+    const deckBottomSpacer = Math.max(0, (deckTotalRows - deckEndIndex) * DECK_ROW_HEIGHT);
 
     const summaryCounts = React.useMemo(() => ({
         total: allPlayers.length,
@@ -188,25 +219,50 @@ export default function Setup({
     }, [toggleDraftPlayer, triggerHaptic]);
 
     React.useEffect(() => {
+        if (!shouldVirtualizeDeck) return;
         setDeckScrollTop(0);
+        lastDeckStartIndexRef.current = 0;
         if (deckViewportRef.current) {
             deckViewportRef.current.scrollTop = 0;
         }
-    }, [playerDeckTab, searchQuery]);
+    }, [playerDeckTab, searchQuery, shouldVirtualizeDeck]);
 
     React.useEffect(() => {
+        if (!shouldVirtualizeDeck) return;
         const maxScrollTop = Math.max(0, deckInnerHeight - deckViewportHeight);
         if (deckScrollTop > maxScrollTop) {
             setDeckScrollTop(maxScrollTop);
+            lastDeckStartIndexRef.current = Math.max(0, Math.floor(maxScrollTop / DECK_ROW_HEIGHT));
             if (deckViewportRef.current) {
                 deckViewportRef.current.scrollTop = maxScrollTop;
             }
         }
-    }, [deckInnerHeight, deckViewportHeight, deckScrollTop]);
+    }, [deckInnerHeight, deckViewportHeight, deckScrollTop, shouldVirtualizeDeck]);
+
+    React.useEffect(() => {
+        return () => {
+            if (deckRafRef.current) {
+                cancelAnimationFrame(deckRafRef.current);
+                deckRafRef.current = 0;
+            }
+        };
+    }, []);
 
     const handleDeckScroll = React.useCallback((event) => {
-        setDeckScrollTop(event.currentTarget.scrollTop);
-    }, []);
+        if (!shouldVirtualizeDeck) return;
+        deckPendingScrollTopRef.current = event.currentTarget.scrollTop;
+        if (deckRafRef.current) return;
+
+        deckRafRef.current = requestAnimationFrame(() => {
+            deckRafRef.current = 0;
+            const nextTop = deckPendingScrollTopRef.current;
+            const nextStart = Math.max(0, Math.floor(nextTop / DECK_ROW_HEIGHT));
+            if (nextStart !== lastDeckStartIndexRef.current) {
+                lastDeckStartIndexRef.current = nextStart;
+                setDeckScrollTop(nextTop);
+            }
+        });
+    }, [shouldVirtualizeDeck]);
 
     const handleDeckToggle = React.useCallback((playerName, shouldDraft) => {
         if (shouldDraft) {
@@ -261,14 +317,28 @@ export default function Setup({
     const glassCard = {
         background: "rgba(255,255,255,0.04)",
         border: "1px solid rgba(255,255,255,0.09)",
-        backdropFilter: "blur(20px)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.07)"
+        backdropFilter: isIOSWebKit ? "none" : "blur(20px)",
+        WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(20px)",
+        boxShadow: isIOSWebKit
+            ? "0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.07)"
+            : "0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.07)"
+    };
+    const amberCtaStyle = {
+        borderRadius: "1rem",
+        padding: "1.1rem",
+        background: "linear-gradient(145deg, rgba(255,202,40,0.38), rgba(245,124,0,0.34))",
+        border: "1px solid rgba(255,202,40,0.62)",
+        boxShadow: "0 0 22px rgba(255,202,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+        color: "#fff8e1",
+        fontSize: "0.8rem",
     };
 
     return (
         <div className="max-w-[1200px] mx-auto space-y-5 md:space-y-8 relative z-10 md:p-8">
             {!isManualMode ? (
-                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+                <motion.div
+                    initial={isIOSWebKit ? false : { y: 20, opacity: 0 }}
+                    animate={isIOSWebKit ? undefined : { y: 0, opacity: 1 }}
                     className="md:grid md:grid-cols-12 md:gap-8 md:items-start space-y-6 md:space-y-0">
 
                     {/* LEFT COLUMN: Draft Input & Settings */}
@@ -291,9 +361,11 @@ export default function Setup({
                                         style={{ border: "1px solid rgba(255,255,255,0.05)", caretColor: "#FFCA28" }}
                                         onFocus={(e) => e.target.style.borderColor = 'rgba(255,202,40,0.5)'}
                                         onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.05)'} />
-                                    <div className="absolute inset-0 rounded-xl pointer-events-none opacity-20 overflow-hidden">
-                                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent h-[200%] animate-[scan_4s_linear_infinite]" />
-                                    </div>
+                                    {!isIOSWebKit && (
+                                        <div className="absolute inset-0 rounded-xl pointer-events-none opacity-20 overflow-hidden">
+                                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent h-[200%] animate-[scan_4s_linear_infinite]" />
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     type="submit"
@@ -341,20 +413,23 @@ export default function Setup({
                         </div>
 
                         <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            initial={isIOSWebKit ? false : { opacity: 0, y: 8 }}
+                            animate={isIOSWebKit ? undefined : { opacity: 1, y: 0 }}
                             className="p-5 rounded-[1.7rem] relative overflow-hidden"
                             style={{
                                 background: "linear-gradient(135deg, rgba(251,191,36,0.18), rgba(245,124,0,0.09) 45%, rgba(255,255,255,0.03))",
                                 border: "1px solid rgba(255,202,40,0.25)",
                                 boxShadow: "0 16px 36px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.14), 0 0 26px rgba(255,202,40,0.12)",
-                                backdropFilter: "blur(26px)"
+                                backdropFilter: isIOSWebKit ? "none" : "blur(26px)",
+                                WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(26px)"
                             }}
                         >
-                            <div className="absolute inset-0 pointer-events-none opacity-70">
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(255,202,40,0.28),transparent_45%)]" />
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_90%_100%,rgba(245,124,0,0.22),transparent_50%)]" />
-                            </div>
+                            {!isIOSWebKit && (
+                                <div className="absolute inset-0 pointer-events-none opacity-70">
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(255,202,40,0.28),transparent_45%)]" />
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_90%_100%,rgba(245,124,0,0.22),transparent_50%)]" />
+                                </div>
+                            )}
 
                             <div className="relative z-10 flex items-center justify-between mb-4">
                                 <p className="text-[9px] font-black uppercase tracking-[0.22em]" style={{ color: "rgba(255,202,40,0.9)" }}>
@@ -378,7 +453,7 @@ export default function Setup({
                                     return (
                                         <motion.button
                                             key={target}
-                                            whileTap={{ scale: 0.95 }}
+                                            whileTap={isIOSWebKit ? undefined : { scale: 0.95 }}
                                             onClick={() => handlePointsToWinSelect(target)}
                                             className="neo-btn rounded-2xl px-2 py-3 text-center relative overflow-hidden"
                                             style={isActive
@@ -396,7 +471,7 @@ export default function Setup({
                                                 }
                                             }
                                         >
-                                            {isActive && (
+                                            {isActive && !isIOSWebKit && (
                                                 <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-white/20 to-transparent animate-[shimmer_2.4s_infinite]" />
                                             )}
                                             <span className="relative z-10 text-lg font-black tabular-nums tracking-tight">{target}</span>
@@ -490,14 +565,19 @@ export default function Setup({
                             style={{
                                 background: "linear-gradient(150deg, rgba(148,163,184,0.14), rgba(30,41,59,0.4) 48%, rgba(2,6,23,0.58))",
                                 border: "1px solid rgba(148,163,184,0.3)",
-                                boxShadow: "0 20px 42px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.12)",
-                                backdropFilter: "blur(24px)"
+                                boxShadow: isIOSWebKit
+                                    ? "0 14px 30px rgba(2,6,23,0.44), inset 0 1px 0 rgba(255,255,255,0.1)"
+                                    : "0 20px 42px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.12)",
+                                backdropFilter: isIOSWebKit ? "none" : "blur(24px)",
+                                WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(24px)"
                             }}
                         >
-                            <div className="absolute inset-0 pointer-events-none">
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(148,163,184,0.28),transparent_46%)]" />
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(56,189,248,0.16),transparent_48%)]" />
-                            </div>
+                            {!isIOSWebKit && (
+                                <div className="absolute inset-0 pointer-events-none">
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(148,163,184,0.28),transparent_46%)]" />
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgba(56,189,248,0.16),transparent_48%)]" />
+                                </div>
+                            )}
 
                             <p className="text-[9px] font-black uppercase tracking-[0.2em] mb-3.5 flex items-center gap-1.5 leading-none" style={{ color: "rgba(241,245,249,0.9)" }}>
                                 <UsersRound size={11} /> Player Command Deck
@@ -570,19 +650,28 @@ export default function Setup({
 
                             <div
                                 className="relative flex-1 min-h-0 rounded-[1.25rem] border border-slate-300/15 bg-slate-950/35 overflow-hidden"
-                                style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -20px 28px rgba(2,6,23,0.24)" }}
+                                style={{
+                                    boxShadow: isIOSWebKit
+                                        ? "inset 0 1px 0 rgba(255,255,255,0.04)"
+                                        : "inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -20px 28px rgba(2,6,23,0.24)"
+                                }}
                             >
-                                <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(15,23,42,0.28), rgba(2,6,23,0.58))" }} />
-                                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 z-10" style={{ background: "linear-gradient(to top, rgba(2,6,23,0.9), rgba(2,6,23,0.22), transparent)" }} />
+                                {!isIOSWebKit && (
+                                    <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(15,23,42,0.24), rgba(2,6,23,0.52))" }} />
+                                )}
+                                {!isIOSWebKit && (
+                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 z-10" style={{ background: "linear-gradient(to top, rgba(2,6,23,0.9), rgba(2,6,23,0.22), transparent)" }} />
+                                )}
 
                                 <div
                                     ref={deckViewportRef}
-                                    onScroll={handleDeckScroll}
+                                    onScroll={shouldVirtualizeDeck ? handleDeckScroll : undefined}
                                     className="relative z-[1] h-full min-h-0 overflow-y-auto p-2 pb-6 scrollbar-hide"
                                     style={{
                                         scrollbarWidth: "none",
-                                        WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 44px), rgba(0,0,0,0) 100%)",
-                                        maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 44px), rgba(0,0,0,0) 100%)"
+                                        WebkitOverflowScrolling: "touch",
+                                        touchAction: "pan-y",
+                                        overscrollBehavior: "contain"
                                     }}
                                 >
                                     {!hasRosterPlayers ? (
@@ -622,30 +711,25 @@ export default function Setup({
                                             </p>
                                         </div>
                                     ) : (
-                                        <div style={{ height: deckInnerHeight, position: "relative" }}>
-                                            {visibleDeckPlayers.map((playerName, listIndex) => {
-                                                const absoluteIndex = deckStartIndex + listIndex;
+                                        <div>
+                                            {deckTopSpacer > 0 && <div aria-hidden="true" style={{ height: deckTopSpacer }} />}
+                                            {visibleDeckPlayers.map((playerName) => {
                                                 const isDrafted = draftedSet.has(playerName);
                                                 return (
                                                     <div
                                                         key={playerName}
-                                                        style={{
-                                                            position: "absolute",
-                                                            top: absoluteIndex * DECK_ROW_HEIGHT,
-                                                            left: 0,
-                                                            right: 0,
-                                                            height: DECK_ROW_HEIGHT,
-                                                            paddingBottom: 8
-                                                        }}
+                                                        style={{ height: DECK_ROW_HEIGHT, paddingBottom: 8 }}
                                                     >
                                                         <UnifiedDeckRow
                                                             playerName={playerName}
                                                             isDrafted={isDrafted}
                                                             onToggle={handleDeckToggle}
+                                                            perfMode={isIOSWebKit}
                                                         />
                                                     </div>
                                                 );
                                             })}
+                                            {deckBottomSpacer > 0 && <div aria-hidden="true" style={{ height: deckBottomSpacer }} />}
                                         </div>
                                     )}
                                 </div>
@@ -654,7 +738,11 @@ export default function Setup({
                     </div>
                 </motion.div>
             ) : (
-                <motion.div initial={{ x: 30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-5">
+                <motion.div
+                    initial={isIOSWebKit ? false : { x: 30, opacity: 0 }}
+                    animate={isIOSWebKit ? undefined : { x: 0, opacity: 1 }}
+                    className="space-y-5"
+                >
                     <div className="flex justify-between items-center">
                         <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.3)" }}>Manual Team Selection</p>
                         <button
@@ -808,8 +896,14 @@ export default function Setup({
                                         </span>
                                     </div>
                                     {canStartManualMatches && (
-                                        <LiquidButton onClick={() => handleFormatSelection(manualTeams)} variant="primary" style={{ width: "100%", padding: "1.2rem", borderRadius: "1rem", fontSize: "0.8rem" }}>
-                                            ⚡ Start Matches
+                                        <LiquidButton
+                                            onClick={() => handleFormatSelection(manualTeams)}
+                                            variant="primary"
+                                            glossy
+                                            style={{ width: "100%", ...amberCtaStyle }}
+                                        >
+                                            <Zap size={16} fill="currentColor" />
+                                            <span className="ml-1.5 font-black">Start Matches</span>
                                         </LiquidButton>
                                     )}
                                 </div>
@@ -854,7 +948,8 @@ export default function Setup({
                         >
                             <Shuffle size={16} />
                         </LiquidButton>
-                        <LiquidButton onClick={confirmPreview} variant="primary" style={{ borderRadius: "1rem", padding: "1.1rem", fontSize: "0.9rem" }}>
+                        <LiquidButton onClick={confirmPreview} variant="primary" glossy style={amberCtaStyle}>
+                            <Zap size={16} fill="currentColor" />
                             <span className="font-black">Start Event</span>
                         </LiquidButton>
                     </div>
@@ -887,16 +982,19 @@ export default function Setup({
             <AnimatePresence>
                 {toastMsg && (
                     <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        initial={isIOSWebKit ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9 }}
+                        animate={isIOSWebKit ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                        exit={isIOSWebKit ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                        transition={isIOSWebKit ? { duration: 0.16, ease: "easeOut" } : { type: "spring", stiffness: 400, damping: 25 }}
                         className="fixed bottom-32 md:bottom-10 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-full flex items-center gap-2 pointer-events-none"
                         style={{
                             background: "rgba(3,7,18,0.85)",
-                            backdropFilter: "blur(20px)",
+                            backdropFilter: isIOSWebKit ? "none" : "blur(20px)",
+                            WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(20px)",
                             border: `1px solid ${toastMsg.type === 'add' ? 'rgba(74,222,128,0.3)' : 'rgba(251,191,36,0.3)'}`,
-                            boxShadow: `0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px ${toastMsg.type === 'add' ? 'rgba(74,222,128,0.15)' : 'rgba(251,191,36,0.15)'}`
+                            boxShadow: isIOSWebKit
+                                ? `0 8px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)`
+                                : `0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px ${toastMsg.type === 'add' ? 'rgba(74,222,128,0.15)' : 'rgba(251,191,36,0.15)'}`
                         }}
                     >
                         {toastMsg.type === 'add' ? (

@@ -33,11 +33,20 @@ import StandingsWorker from "./workers/standings.worker.js?worker";
 const MotionDiv = motion.div;
 
 function App() {
-  const { tournaments, leaderboardData, roster } = useTournaments();
+  const { tournaments, leaderboardData, roster, loading: tournamentsLoading } = useTournaments();
   const { trigger: triggerHaptic } = useHaptic();
+  const isIOSWebKit = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isiOSDevice = /iP(hone|ad|od)/i.test(ua);
+    const isTouchMac = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    return isiOSDevice || isTouchMac;
+  }, []);
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTournamentId, setActiveTournamentId] = useState(null);
+  const [openedTournamentWasDone, setOpenedTournamentWasDone] = useState(false);
+  const hubUiStateRef = useRef({ scrollTop: 0, visibleEventsCount: 10 });
 
   // Auto-clear active tournament if it doesn't exist anymore
   useEffect(() => {
@@ -72,6 +81,10 @@ function App() {
       console.error("Anonymous auth bootstrap failed", error);
     });
   }, []);
+
+  useEffect(() => {
+    setDismissCelebration(false);
+  }, [activeTournamentId]);
   const [standings, setStandings] = useState([]);
   const standingsWorkerRef = useRef(null);
   const standingsRequestIdRef = useRef(0);
@@ -308,9 +321,25 @@ function App() {
     }
 
     setNewTourneyName("");
+    setOpenedTournamentWasDone(false);
     setActiveTournamentId(id); // Switch to the new event
     setHubTab("events"); // Ensure hub is on history when coming back
     triggerHaptic(50);
+  };
+
+  const handleOpenTournament = (id, status = null) => {
+    setOpenedTournamentWasDone(status === "done");
+    setActiveTournamentId(id);
+  };
+
+  const handleHubScrollTopChange = (nextTop) => {
+    const safeTop = Number.isFinite(nextTop) ? Math.max(0, nextTop) : 0;
+    hubUiStateRef.current.scrollTop = safeTop;
+  };
+
+  const handleHubVisibleEventsCountChange = (nextCount) => {
+    const safeCount = Number.isFinite(nextCount) ? Math.max(1, Math.trunc(nextCount)) : 10;
+    hubUiStateRef.current.visibleEventsCount = safeCount;
   };
 
   const deleteTournamentHandler = async (id) => {
@@ -571,6 +600,71 @@ function App() {
     showAlert("Info", "Editing standings is locked.");
   };
 
+  const tournamentViewNode = (
+    <TournamentView
+      data={renderData}
+      roster={roster}
+      isAdmin={isAdmin}
+      setIsAdmin={setIsAdmin}
+      setActiveTournamentId={setActiveTournamentId}
+      openedAsCompleted={openedTournamentWasDone}
+      // Format
+      matchFormat={matchFormat}
+      setMatchFormat={setMatchFormat}
+      pointsToWin={pointsToWin}
+      setPointsToWin={handlePointsToWinChange}
+      // Setup
+      newPlayer={newPlayer}
+      setNewPlayer={setNewPlayer}
+      addPlayer={addPlayer}
+      toggleDraftPlayer={toggleDraftPlayer}
+      prepareAutoTournament={prepareAutoTournament}
+      commitAutoTournament={commitAutoTournament}
+      isManualMode={isManualMode}
+      setIsManualMode={setIsManualMode}
+      manualTeams={manualTeams}
+      handleManualSelect={handleManualSelect}
+      removeManualTeam={removeManualTeam}
+      handleFormatSelection={handleFormatSelection}
+      selectedPlayers={selectedPlayers}
+      // Match
+      adjustScore={adjustScore}
+      confirmMatch={confirmMatch}
+      confirmKnockout={confirmKnockout}
+      generateKnockouts={generateKnockouts}
+      // Standings
+      standings={standings}
+      handleStandingsLongPress={handleStandingsLongPress}
+      // Celebration
+      dismissCelebration={dismissCelebration}
+      setDismissCelebration={setDismissCelebration}
+      isTournamentOver={isTournamentOver}
+      tournamentWinner={tournamentWinner}
+    />
+  );
+
+  const tournamentHubNode = (
+    <TournamentHub
+      tournaments={tournaments}
+      setActiveTournamentId={setActiveTournamentId}
+      onOpenTournament={handleOpenTournament}
+      createTournament={handleCreateTournament}
+      deleteTournament={deleteTournamentHandler}
+      newTourneyName={newTourneyName}
+      setNewTourneyName={setNewTourneyName}
+      globalLeaderboard={globalLeaderboard}
+      isAdmin={isAdmin}
+      setIsAdmin={setIsAdmin}
+      hubTab={hubTab}
+      setHubTab={setHubTab}
+      isTournamentsLoading={tournamentsLoading}
+      persistedScrollTop={hubUiStateRef.current.scrollTop}
+      onScrollTopChange={handleHubScrollTopChange}
+      persistedVisibleEventsCount={hubUiStateRef.current.visibleEventsCount}
+      onVisibleEventsCountChange={handleHubVisibleEventsCountChange}
+    />
+  );
+
   return (
     <ErrorBoundary>
       <Modal
@@ -583,79 +677,33 @@ function App() {
         onCancel={() => setModal({ ...modal, show: false })}
       />
 
-      <AnimatePresence mode="wait" initial={false}>
-        {activeTournamentId ? (
-          <MotionDiv
-            key="tournament-view"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TournamentView
-              data={renderData}
-              roster={roster}
-              isAdmin={isAdmin}
-              setIsAdmin={setIsAdmin}
-              setActiveTournamentId={setActiveTournamentId}
-              // Format
-              matchFormat={matchFormat}
-              setMatchFormat={setMatchFormat}
-              pointsToWin={pointsToWin}
-              setPointsToWin={handlePointsToWinChange}
-              // Setup
-              newPlayer={newPlayer}
-              setNewPlayer={setNewPlayer}
-              addPlayer={addPlayer}
-              toggleDraftPlayer={toggleDraftPlayer}
-              prepareAutoTournament={prepareAutoTournament}
-              commitAutoTournament={commitAutoTournament}
-              isManualMode={isManualMode}
-              setIsManualMode={setIsManualMode}
-              manualTeams={manualTeams}
-              handleManualSelect={handleManualSelect}
-              removeManualTeam={removeManualTeam}
-              handleFormatSelection={handleFormatSelection}
-              selectedPlayers={selectedPlayers}
-              // Match
-              adjustScore={adjustScore}
-              confirmMatch={confirmMatch}
-              confirmKnockout={confirmKnockout}
-              generateKnockouts={generateKnockouts}
-              // Standings
-              standings={standings}
-              handleStandingsLongPress={handleStandingsLongPress}
-              // Celebration
-              dismissCelebration={dismissCelebration}
-              setDismissCelebration={setDismissCelebration}
-              isTournamentOver={isTournamentOver}
-              tournamentWinner={tournamentWinner}
-            />
-          </MotionDiv>
-        ) : (
-          <MotionDiv
-            key="tournament-hub"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TournamentHub
-              tournaments={tournaments}
-              setActiveTournamentId={setActiveTournamentId}
-              createTournament={handleCreateTournament}
-              deleteTournament={deleteTournamentHandler}
-              newTourneyName={newTourneyName}
-              setNewTourneyName={setNewTourneyName}
-              globalLeaderboard={globalLeaderboard}
-              isAdmin={isAdmin}
-              setIsAdmin={setIsAdmin}
-              hubTab={hubTab}
-              setHubTab={setHubTab}
-            />
-          </MotionDiv>
-        )}
-      </AnimatePresence>
+      {isIOSWebKit ? (
+        activeTournamentId ? tournamentViewNode : tournamentHubNode
+      ) : (
+        <AnimatePresence mode="sync" initial={false}>
+          {activeTournamentId ? (
+            <MotionDiv
+              key="tournament-view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+            >
+              {tournamentViewNode}
+            </MotionDiv>
+          ) : (
+            <MotionDiv
+              key="tournament-hub"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+            >
+              {tournamentHubNode}
+            </MotionDiv>
+          )}
+        </AnimatePresence>
+      )}
     </ErrorBoundary>
   );
 }

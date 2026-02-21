@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -43,14 +44,14 @@ export default function GlassModal({
         ? React.cloneElement(icon, { size: 24, className: iconColorClass })
         : icon;
 
-    return (
+    const modalNode = (
         <AnimatePresence>
             {isOpen && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[120] flex items-center justify-center p-5 bg-[#020617]/72 backdrop-blur-2xl"
+                    className="fixed inset-0 z-[320] flex items-start md:items-center justify-center px-4 pb-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] bg-[#020617]/78 backdrop-blur-xl"
                     onClick={onClose || undefined}
                     role="dialog"
                     aria-modal="true"
@@ -64,7 +65,7 @@ export default function GlassModal({
                         style={{
                             background: "linear-gradient(165deg, rgba(6,10,22,0.96), rgba(3,8,20,0.98) 55%, rgba(10,16,32,0.94))",
                             boxShadow: "0 24px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.07)",
-                            maxHeight: "88vh",
+                            maxHeight: "calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 1rem)",
                         }}
                     >
                         {/* Subtle top glow */}
@@ -135,4 +136,10 @@ export default function GlassModal({
             )}
         </AnimatePresence>
     );
+
+    if (typeof document !== "undefined") {
+        return createPortal(modalNode, document.body);
+    }
+
+    return modalNode;
 }

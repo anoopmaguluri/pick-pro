@@ -58,6 +58,8 @@ const formatEventAge = (timestamp) => {
 };
 
 const rankingColumnLayout = "grid-cols-[28px_minmax(0,1fr)_56px_64px]";
+const INITIAL_EVENTS_BATCH = 10;
+const LOAD_MORE_EVENTS_BATCH = 8;
 const toRatingStr = (player) => toNumber(player?.rating).toFixed(2);
 const toWinRatePct = (player) => {
     const wins = toNumber(player?.w);
@@ -71,6 +73,7 @@ const toWinRatePct = (player) => {
 export default function TournamentHub({
     tournaments,
     setActiveTournamentId,
+    onOpenTournament,
     createTournament,
     deleteTournament,
     newTourneyName,
@@ -80,10 +83,34 @@ export default function TournamentHub({
     setIsAdmin,
     hubTab,
     setHubTab,
+    isTournamentsLoading = false,
+    persistedScrollTop = 0,
+    onScrollTopChange,
+    persistedVisibleEventsCount = INITIAL_EVENTS_BATCH,
+    onVisibleEventsCountChange,
 }) {
     const { trigger: triggerHaptic } = useHaptic();
     const hubHeaderRef = React.useRef(null);
+    const hubMainScrollRef = React.useRef(null);
+    const loadMoreSentinelRef = React.useRef(null);
+    const rankingsPanelRef = React.useRef(null);
+    const rankingsListRef = React.useRef(null);
+    const hasRestoredScrollRef = React.useRef(false);
     const [hubHeaderHeight, setHubHeaderHeight] = React.useState(0);
+    const [visibleEventsCount, setVisibleEventsCount] = React.useState(() => {
+        const initialCount = Number.isFinite(persistedVisibleEventsCount)
+            ? Math.max(1, Math.trunc(persistedVisibleEventsCount))
+            : INITIAL_EVENTS_BATCH;
+        return initialCount;
+    });
+    const [rankingsListScrollEnabled, setRankingsListScrollEnabled] = React.useState(false);
+    const isIOSWebKit = React.useMemo(() => {
+        if (typeof navigator === "undefined") return false;
+        const ua = navigator.userAgent || "";
+        const isiOSDevice = /iP(hone|ad|od)/i.test(ua);
+        const isTouchMac = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+        return isiOSDevice || isTouchMac;
+    }, []);
 
     const [deleteModal, setDeleteModal] = React.useState({
         show: false,
@@ -107,6 +134,21 @@ export default function TournamentHub({
     );
     const topThree = leaderboard.slice(0, 3);
     const remainingLeaderboard = leaderboard.slice(3);
+    const visibleTournaments = sortedTournaments.slice(0, visibleEventsCount);
+    const hasMoreEvents = visibleEventsCount < sortedTournaments.length;
+    const canObserveLoadMore = typeof window !== "undefined" && "IntersectionObserver" in window;
+    const rankingsPanelHeight = `calc(100svh - ${Math.max(0, hubHeaderHeight)}px - 20px)`;
+    const showEventsStencil = isTournamentsLoading && sortedTournaments.length === 0;
+
+    const loadMoreEvents = React.useCallback(() => {
+        setVisibleEventsCount((prev) => Math.min(sortedTournaments.length, prev + LOAD_MORE_EVENTS_BATCH));
+    }, [sortedTournaments.length]);
+
+    React.useEffect(() => {
+        if (typeof onVisibleEventsCountChange === "function") {
+            onVisibleEventsCountChange(visibleEventsCount);
+        }
+    }, [visibleEventsCount, onVisibleEventsCountChange]);
 
     React.useLayoutEffect(() => {
         const element = hubHeaderRef.current;
@@ -122,8 +164,83 @@ export default function TournamentHub({
         return () => observer.disconnect();
     }, [hubTab]);
 
+    React.useEffect(() => {
+        setVisibleEventsCount((prev) => {
+            if (sortedTournaments.length <= INITIAL_EVENTS_BATCH) return sortedTournaments.length;
+            if (hubTab !== "events") return prev;
+            return Math.min(sortedTournaments.length, Math.max(INITIAL_EVENTS_BATCH, prev));
+        });
+    }, [sortedTournaments.length, hubTab]);
+
+    React.useEffect(() => {
+        if (hubTab !== "events" || !hasMoreEvents || !canObserveLoadMore) return undefined;
+
+        const sentinel = loadMoreSentinelRef.current;
+        const root = hubMainScrollRef.current;
+        if (!sentinel || !root) return undefined;
+
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                loadMoreEvents();
+            }
+        }, {
+            root,
+            rootMargin: "220px 0px 260px 0px",
+            threshold: 0.01,
+        });
+
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hubTab, hasMoreEvents, loadMoreEvents, canObserveLoadMore]);
+
+    React.useLayoutEffect(() => {
+        const scroller = hubMainScrollRef.current;
+        if (!scroller || hasRestoredScrollRef.current) return;
+        const nextTop = Number.isFinite(persistedScrollTop) ? Math.max(0, persistedScrollTop) : 0;
+        scroller.scrollTop = nextTop;
+        hasRestoredScrollRef.current = true;
+    }, [persistedScrollTop, sortedTournaments.length]);
+
+    React.useEffect(() => {
+        if (hubTab !== "rankings") {
+            setRankingsListScrollEnabled(false);
+            if (rankingsListRef.current) rankingsListRef.current.scrollTop = 0;
+            return undefined;
+        }
+
+        const scroller = hubMainScrollRef.current;
+        const panel = rankingsPanelRef.current;
+        if (!scroller || !panel || typeof window === "undefined") return undefined;
+
+        let frame = 0;
+        const syncScrollMode = () => {
+            if (frame) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+                const paddingTop = Number.parseFloat(window.getComputedStyle(scroller).paddingTop || "0") || 0;
+                const handoffThreshold = Math.max(0, panel.offsetTop - paddingTop);
+                const shouldEnableInner = scroller.scrollTop >= (handoffThreshold - 1);
+                setRankingsListScrollEnabled((prev) => (prev === shouldEnableInner ? prev : shouldEnableInner));
+
+                if (!shouldEnableInner && rankingsListRef.current && rankingsListRef.current.scrollTop !== 0) {
+                    rankingsListRef.current.scrollTop = 0;
+                }
+            });
+        };
+
+        syncScrollMode();
+        scroller.addEventListener("scroll", syncScrollMode, { passive: true });
+        window.addEventListener("resize", syncScrollMode);
+
+        return () => {
+            scroller.removeEventListener("scroll", syncScrollMode);
+            window.removeEventListener("resize", syncScrollMode);
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, [hubTab, hubHeaderHeight, leaderboard.length]);
+
     return (
-        <div className="w-full max-w-5xl mx-auto h-[100dvh] flex flex-col relative overflow-hidden"
+        <div className="w-full max-w-5xl mx-auto h-[100svh] flex flex-col relative overflow-hidden"
             style={{ background: "radial-gradient(ellipse 120% 80% at 50% -10%, rgba(99,102,241,0.15) 0%, transparent 60%), radial-gradient(ellipse 80% 60% at 80% 80%, rgba(236,72,153,0.08) 0%, transparent 50%), #030712" }}>
 
             <Modal
@@ -143,15 +260,22 @@ export default function TournamentHub({
             />
 
             {/* Ambient background orbs */}
-            <div className="absolute top-0 left-1/4 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(99,102,241,0.14)" }} />
-            <div className="absolute bottom-1/4 right-0 w-56 h-56 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(236,72,153,0.12)" }} />
-            <div className="absolute top-1/3 right-1/4 w-40 h-40 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(255,109,0,0.08)" }} />
+            {!isIOSWebKit && (
+                <>
+                    <div className="absolute top-0 left-1/4 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(99,102,241,0.14)" }} />
+                    <div className="absolute bottom-1/4 right-0 w-56 h-56 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(236,72,153,0.12)" }} />
+                    <div className="absolute top-1/3 right-1/4 w-40 h-40 rounded-full blur-3xl pointer-events-none" style={{ background: "rgba(255,109,0,0.08)" }} />
+                </>
+            )}
 
             {/* ── STICKY GLASS HEADER (Logo + Search + Tabs) ── */}
-            <GlassHeader headerRef={hubHeaderRef}>
+            <GlassHeader headerRef={hubHeaderRef} clarity="solid" showAmbient={false}>
 
                 {/* HEADER */}
-                <header className="flex-none px-6 pt-12 pb-4 flex justify-between items-end relative z-10">
+                <header
+                    className="flex-none px-6 pb-4 flex justify-between items-end relative z-10"
+                    style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+                >
                     <div>
                         <div className="flex items-center gap-2 mb-0.5">
                             <div className="w-7 h-7 rounded-xl flex items-center justify-center"
@@ -252,7 +376,8 @@ export default function TournamentHub({
                                 background: "linear-gradient(135deg, rgba(10,16,32,0.94), rgba(2,9,23,0.95) 56%, rgba(16,13,6,0.9))",
                                 border: "1px solid rgba(120,132,156,0.2)",
                                 boxShadow: "0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
-                                backdropFilter: "blur(14px)",
+                                backdropFilter: isIOSWebKit ? "none" : "blur(14px)",
+                                WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(14px)",
                             }}
                         >
                             <div className="absolute inset-0 pointer-events-none">
@@ -318,7 +443,13 @@ export default function TournamentHub({
 
             {/* MAIN CONTENT */}
             <main
-                className={`flex-1 min-h-0 px-3 relative z-10 ${hubTab === "events" ? "overflow-y-auto" : "overflow-hidden"}`}
+                ref={hubMainScrollRef}
+                className="flex-1 min-h-0 px-3 relative z-10 overflow-y-auto"
+                onScroll={(event) => {
+                    if (typeof onScrollTopChange === "function") {
+                        onScrollTopChange(event.currentTarget.scrollTop);
+                    }
+                }}
                 style={{
                     paddingTop: `${Math.max(0, hubHeaderHeight) + 12}px`,
                     scrollbarWidth: "none",
@@ -330,28 +461,63 @@ export default function TournamentHub({
                     {hubTab === "events" ? (
                         <motion.div
                             key="events"
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 10 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            initial={isIOSWebKit ? false : { opacity: 0, x: -10 }}
+                            animate={isIOSWebKit ? undefined : { opacity: 1, x: 0 }}
+                            exit={isIOSWebKit ? undefined : { opacity: 0, x: 10 }}
+                            transition={isIOSWebKit ? undefined : { duration: 0.2, ease: "easeOut" }}
                             className="pt-3 pb-10 space-y-1.5"
                         >
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-2">
                                 <AnimatePresence initial={false} mode="popLayout">
-                                    {sortedTournaments.map((t) => (
-                                        <TournamentCardItem
-                                            key={t.id}
-                                            t={t}
-                                            isAdmin={isAdmin}
-                                            triggerHaptic={triggerHaptic}
-                                            setActiveTournamentId={setActiveTournamentId}
-                                            setDeleteModal={setDeleteModal}
-                                        />
-                                    ))}
+                                    {showEventsStencil
+                                        ? Array.from({ length: 6 }).map((_, idx) => (
+                                            <TournamentCardStencil key={`stencil-${idx}`} />
+                                        ))
+                                        : visibleTournaments.map((t) => (
+                                            <TournamentCardItem
+                                                key={t.id}
+                                                t={t}
+                                                isIOSWebKit={isIOSWebKit}
+                                                isAdmin={isAdmin}
+                                                triggerHaptic={triggerHaptic}
+                                                setActiveTournamentId={onOpenTournament || setActiveTournamentId}
+                                                setDeleteModal={setDeleteModal}
+                                            />
+                                        ))}
                                 </AnimatePresence>
                             </div>
 
-                            {sortedTournaments.length === 0 && (
+                            {hasMoreEvents && (
+                                <div ref={loadMoreSentinelRef} className="h-16 flex items-center justify-center">
+                                    {canObserveLoadMore ? (
+                                        <span
+                                            className="px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-[0.14em]"
+                                            style={{
+                                                background: "rgba(15,23,42,0.58)",
+                                                border: "1px solid rgba(120,132,156,0.3)",
+                                                color: "rgba(191,207,227,0.82)",
+                                            }}
+                                        >
+                                            Loading More Events...
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={loadMoreEvents}
+                                            className="neo-btn rounded-full px-4 py-2 text-[8px] font-black uppercase tracking-[0.14em]"
+                                            style={{
+                                                background: "rgba(15,23,42,0.62)",
+                                                border: "1px solid rgba(120,132,156,0.34)",
+                                                color: "rgba(226,232,240,0.92)",
+                                            }}
+                                        >
+                                            Load More Events
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {sortedTournaments.length === 0 && !showEventsStencil && (
                                 <div className="py-20 text-center">
                                     <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
                                         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -366,11 +532,11 @@ export default function TournamentHub({
                     ) : (
                         <motion.div
                             key="rankings"
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                            className="h-full min-h-0 flex flex-col gap-3 overflow-hidden pb-3"
+                            initial={isIOSWebKit ? false : { opacity: 0, x: 10 }}
+                            animate={isIOSWebKit ? undefined : { opacity: 1, x: 0 }}
+                            exit={isIOSWebKit ? undefined : { opacity: 0, x: -10 }}
+                            transition={isIOSWebKit ? undefined : { duration: 0.2, ease: "easeOut" }}
+                            className="relative min-h-full flex flex-col gap-3 pb-3"
                         >
                             {leaderboard.length > 0 ? (
                                 <>
@@ -489,14 +655,17 @@ export default function TournamentHub({
                                     </motion.div>
 
                                     <motion.div
+                                        ref={rankingsPanelRef}
                                         initial={{ opacity: 0, y: 8 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: 0.04 }}
-                                        className="relative rounded-[2rem] overflow-hidden flex-1 min-h-0 flex flex-col"
+                                        className="relative rounded-[2rem] overflow-hidden sticky top-0 z-10 flex flex-col"
                                         style={{
                                             background: "linear-gradient(158deg, rgba(7,11,22,0.92), rgba(2,8,20,0.98) 58%, rgba(8,14,30,0.92))",
                                             border: "1px solid rgba(120,132,156,0.24)",
                                             boxShadow: "0 18px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1)",
+                                            height: rankingsPanelHeight,
+                                            minHeight: "340px",
                                         }}
                                     >
                                         <div className="absolute inset-0 pointer-events-none">
@@ -556,11 +725,14 @@ export default function TournamentHub({
                                         </div>
 
                                         <div
+                                            ref={rankingsListRef}
                                             className="relative z-10 px-3 pb-3 flex-1 min-h-0 overflow-y-auto"
                                             style={{
+                                                overflowY: rankingsListScrollEnabled ? "auto" : "hidden",
+                                                pointerEvents: rankingsListScrollEnabled ? "auto" : "none",
                                                 scrollbarWidth: "none",
                                                 WebkitOverflowScrolling: "touch",
-                                                touchAction: "pan-y",
+                                                touchAction: rankingsListScrollEnabled ? "pan-y" : "none",
                                             }}
                                         >
                                             {remainingLeaderboard.length > 0 ? remainingLeaderboard.map((player, offsetIdx) => {
@@ -676,8 +848,53 @@ export default function TournamentHub({
     );
 }
 
+function TournamentCardStencil() {
+    return (
+        <li style={{ listStyle: "none" }}>
+            <div className="relative py-1">
+                <div
+                    className="relative grid grid-cols-[44px_minmax(0,1fr)_96px] sm:grid-cols-[44px_minmax(0,1fr)_106px] items-stretch gap-2.5 sm:gap-3 px-4 py-3 rounded-[1.85rem] overflow-hidden h-[108px] animate-pulse"
+                    style={{
+                        background: "linear-gradient(132deg, rgba(8,12,26,0.88), rgba(9,18,38,0.86) 58%, rgba(15,23,42,0.84) 100%)",
+                        border: "1px solid rgba(148,163,184,0.2)",
+                        boxShadow: "0 8px 16px rgba(2,6,23,0.22), inset 0 1px 0 rgba(255,255,255,0.06)"
+                    }}
+                >
+                    <div className="absolute inset-0 pointer-events-none opacity-45">
+                        <div className="absolute inset-0 bg-[repeating-linear-gradient(115deg,rgba(148,163,184,0.18)_0px,rgba(148,163,184,0.18)_1px,transparent_1px,transparent_14px)]" />
+                    </div>
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                        <div className="absolute -left-1/3 top-0 h-full w-1/3 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-[shimmer_2.2s_infinite]" />
+                    </div>
+
+                    <div className="w-11 h-11 rounded-[14px] self-center justify-self-center" style={{ background: "rgba(148,163,184,0.18)", border: "1px solid rgba(148,163,184,0.24)" }} />
+
+                    <div className="min-w-0 h-full flex flex-col justify-between py-[2px]">
+                        <div className="h-4 w-28 rounded-md bg-white/14" />
+                        <div className="flex items-center gap-1.5">
+                            <span className="h-4 w-12 rounded-full bg-white/12" />
+                            <span className="h-4 w-16 rounded-full bg-white/10" />
+                            <span className="h-4 w-10 rounded-full bg-white/10" />
+                        </div>
+                        <div className="h-3 w-24 rounded bg-white/10" />
+                    </div>
+
+                    <div className="w-[96px] sm:w-[106px] h-full flex flex-col items-end justify-between py-[2px]">
+                        <div className="flex items-center -space-x-1.5">
+                            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/18 ring-2 ring-slate-950/60" />
+                            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/14 ring-2 ring-slate-950/60" />
+                            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/10 ring-2 ring-slate-950/60" />
+                        </div>
+                        <span className="h-3 w-16 rounded bg-white/10" />
+                    </div>
+                </div>
+            </div>
+        </li>
+    );
+}
+
 // ─── Liquid Glass card sub-component ───────────────────────────────────────
-function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, setDeleteModal }) {
+function TournamentCardItem({ t, isIOSWebKit, isAdmin, triggerHaptic, setActiveTournamentId, setDeleteModal }) {
     const x = useMotionValue(0);
     const wasDragged = React.useRef(false);
     const dragTimeout = React.useRef(null);
@@ -689,6 +906,7 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
     const [pressSweepId, setPressSweepId] = React.useState(0);
 
     const spawnRipple = (e, setter) => {
+        if (isIOSWebKit) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const size = Math.max(rect.width, rect.height) * 1.2;
         const id = Date.now() + Math.random();
@@ -756,17 +974,17 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
     return (
         /* Outer li: opacity only — NO overflow:hidden so shadows can breathe */
         <motion.li
-            layout
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.22 } }}
+            layout={!isIOSWebKit}
+            initial={isIOSWebKit ? false : { opacity: 0 }}
+            animate={isIOSWebKit ? undefined : { opacity: 1 }}
+            exit={isIOSWebKit ? undefined : { opacity: 0, transition: { duration: 0.22 } }}
             style={{ listStyle: "none" }}
         >
             {/* Inner div: height collapse for smooth list reflow */}
             <motion.div
-                initial={{ height: "auto" }}
-                animate={{ height: "auto" }}
-                exit={{
+                initial={isIOSWebKit ? false : { height: "auto" }}
+                animate={isIOSWebKit ? undefined : { height: "auto" }}
+                exit={isIOSWebKit ? undefined : {
                     height: 0,
                     marginBottom: 0,
                     transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] }
@@ -786,7 +1004,8 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                     background: deleteRed,
                                     border: `1px solid`,
                                     borderColor: deleteBorder,
-                                    backdropFilter: "blur(18px) saturate(180%)",
+                                    backdropFilter: isIOSWebKit ? "none" : "blur(18px) saturate(180%)",
+                                    WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(18px) saturate(180%)",
                                     boxShadow: "inset 0 1px 0 rgba(255,160,120,0.3), inset 0 -1px 0 rgba(0,0,0,0.2)",
                                 }}
                                 onClick={(e) => {
@@ -847,14 +1066,16 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                 snapBack();
                             }
                         }}
-                        whileHover={{ y: -1.5, boxShadow: cardHoverShadow, borderColor: "rgba(148,163,184,0.34)" }}
-                        whileTap={{ scale: 0.976 }}
-                        onTapStart={() => setPressSweepId((prev) => prev + 1)}
+                        whileHover={isIOSWebKit ? undefined : { y: -1.5, boxShadow: cardHoverShadow, borderColor: "rgba(148,163,184,0.34)" }}
+                        whileTap={isIOSWebKit ? undefined : { scale: 0.976 }}
+                        onTapStart={isIOSWebKit ? undefined : () => setPressSweepId((prev) => prev + 1)}
                         onClick={(e) => {
                             if (!wasDragged.current) {
                                 spawnRipple(e, setCardRipples);
                                 triggerHaptic(40);
-                                setActiveTournamentId(t.id);
+                                if (typeof setActiveTournamentId === "function") {
+                                    setActiveTournamentId(t.id, t.status);
+                                }
                             }
                         }}
                         className="relative grid grid-cols-[44px_minmax(0,1fr)_96px] sm:grid-cols-[44px_minmax(0,1fr)_106px] items-stretch gap-2.5 sm:gap-3 px-4 py-3 rounded-[1.85rem] cursor-pointer overflow-hidden h-[108px]"
@@ -863,23 +1084,25 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                             zIndex: 2,
                             background: cardBg,
                             border: cardBorder,
-                            backdropFilter: "blur(26px) saturate(190%) brightness(1.06)",
-                            WebkitBackdropFilter: "blur(26px) saturate(190%) brightness(1.06)",
-                            boxShadow: cardShadow,
+                            backdropFilter: isIOSWebKit ? "none" : "blur(26px) saturate(190%) brightness(1.06)",
+                            WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(26px) saturate(190%) brightness(1.06)",
+                            boxShadow: isIOSWebKit ? "0 8px 16px rgba(2,6,23,0.26), inset 0 1px 0 rgba(255,255,255,0.06)" : cardShadow,
                         }}
                     >
-                        <div className="absolute inset-0 pointer-events-none z-0">
-                            <div className="absolute -left-12 -top-10 w-40 h-24 rounded-full blur-2xl" style={{ background: `rgba(${accentRgb},0.09)` }} />
-                            <div className="absolute -right-12 -bottom-14 w-40 h-24 rounded-full blur-2xl" style={{ background: "rgba(59,130,246,0.09)" }} />
-                        </div>
+                        {!isIOSWebKit && (
+                            <div className="absolute inset-0 pointer-events-none z-0">
+                                <div className="absolute -left-12 -top-10 w-40 h-24 rounded-full blur-2xl" style={{ background: `rgba(${accentRgb},0.09)` }} />
+                                <div className="absolute -right-12 -bottom-14 w-40 h-24 rounded-full blur-2xl" style={{ background: "rgba(59,130,246,0.09)" }} />
+                            </div>
+                        )}
 
                         {/* ─ Liquid ripples (card click) ─ */}
-                        {cardRipples.map(r => (
+                        {!isIOSWebKit && cardRipples.map(r => (
                             <span key={r.id} className="liquid-ripple z-20"
                                 style={{ left: r.x, top: r.y, width: r.size, height: r.size }} />
                         ))}
 
-                        {pressSweepId > 0 && (
+                        {!isIOSWebKit && pressSweepId > 0 && (
                             <motion.span
                                 key={pressSweepId}
                                 className="absolute inset-y-0 -left-1/3 w-1/3 pointer-events-none z-20"
@@ -909,7 +1132,8 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                         ? "linear-gradient(145deg, rgba(52,211,153,0.18), rgba(16,185,129,0.1))"
                                         : "linear-gradient(145deg, rgba(255,109,0,0.18), rgba(251,146,60,0.1))",
                                 border: `1px solid rgba(${accentRgb},0.34)`,
-                                backdropFilter: "blur(10px)",
+                                backdropFilter: isIOSWebKit ? "none" : "blur(10px)",
+                                WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(10px)",
                                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 16px rgba(2,6,23,0.35)",
                             }}
                         >
@@ -932,7 +1156,8 @@ function TournamentCardItem({ t, isAdmin, triggerHaptic, setActiveTournamentId, 
                                         background: `rgba(${accentRgb},0.12)`,
                                         border: `1px solid rgba(${accentRgb},0.22)`,
                                         color: accentColor,
-                                        backdropFilter: "blur(8px)",
+                                        backdropFilter: isIOSWebKit ? "none" : "blur(8px)",
+                                        WebkitBackdropFilter: isIOSWebKit ? "none" : "blur(8px)",
                                         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)",
                                     }}
                                 >

@@ -99,6 +99,7 @@ export default function TournamentView({
     setDismissCelebration,
     isTournamentOver,
     tournamentWinner,
+    openedAsCompleted,
     prepareAutoTournament,
     commitAutoTournament,
     removeManualTeam,
@@ -131,16 +132,28 @@ export default function TournamentView({
         return matches.length > 0 && matches.every((m) => m && m.done);
     }, [data?.matches, data?.knockouts]);
 
-    // Celebration Logic: Only show if tournament just finished (transition),
-    // or if we haven't dismissed it yet.
-    // If we load the page and it's ALREADY over, we auto-dismiss to be polite.
-    const wasOverOnMount = React.useRef(isTournamentOver);
+    // Celebration should never auto-show when opening an already completed event.
+    const celebrationInitRef = React.useRef(false);
+    const [openedCompleted, setOpenedCompleted] = useState(() => Boolean(openedAsCompleted));
 
     React.useEffect(() => {
-        if (wasOverOnMount.current) {
-            setDismissCelebration(true);
+        if (!openedAsCompleted) return;
+        setOpenedCompleted(true);
+        setDismissCelebration(true);
+    }, [openedAsCompleted, setDismissCelebration]);
+
+    React.useEffect(() => {
+        if (!data) return;
+
+        if (!celebrationInitRef.current) {
+            celebrationInitRef.current = true;
+            const initialCompletedOpen = Boolean(openedAsCompleted) || data?.status === "done";
+            setOpenedCompleted(initialCompletedOpen);
+            if (initialCompletedOpen) {
+                setDismissCelebration(true);
+            }
         }
-    }, [setDismissCelebration]);
+    }, [data, data?.status, openedAsCompleted, setDismissCelebration]);
 
     // Keep independent scroll positions per mobile tab.
     React.useEffect(() => {
@@ -178,7 +191,7 @@ export default function TournamentView({
 
 
     return (
-        <div className="w-full max-w-5xl mx-auto h-[100dvh] flex flex-col relative overflow-hidden text-white"
+        <div className="w-full max-w-5xl mx-auto h-[100svh] flex flex-col relative overflow-hidden text-white"
             style={{ background: "radial-gradient(ellipse 120% 80% at 50% -10%, rgba(99,102,241,0.15) 0%, transparent 60%), radial-gradient(ellipse 80% 60% at 80% 80%, rgba(236,72,153,0.08) 0%, transparent 50%), #030712" }}>
 
             {/* Ambient orbs */}
@@ -187,7 +200,7 @@ export default function TournamentView({
 
             {/* ── CHAMPION CELEBRATION ─────────────────────────────────────── */}
             <AnimatePresence>
-                {isTournamentOver && !dismissCelebration && (
+                {isTournamentOver && !dismissCelebration && !openedCompleted && (
                     <motion.div
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.96 }}
                         transition={{ duration: 0.35 }}
@@ -255,7 +268,7 @@ export default function TournamentView({
             </AnimatePresence>
 
             {/* HEADER */}
-            <GlassHeader headerRef={viewHeaderRef}>
+            <GlassHeader headerRef={viewHeaderRef} clarity="solid" showAmbient={false}>
                 <header className="px-5 py-4 flex justify-between items-center gap-3">
                     <motion.button whileTap={{ scale: 0.88 }}
                         onClick={() => { triggerHaptic(50); setActiveTournamentId(null); }}
