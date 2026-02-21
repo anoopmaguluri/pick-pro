@@ -4,6 +4,12 @@ import { Trophy } from "lucide-react";
 import LiquidButton from "../../common/LiquidButton";
 
 const columnLayout = "grid-cols-[26px_minmax(0,1fr)_34px_30px_30px_42px_56px]";
+const getViewportHeight = () => {
+    if (typeof window === "undefined") return 0;
+    if (window.visualViewport?.height) return window.visualViewport.height;
+    return window.innerHeight || document.documentElement?.clientHeight || 0;
+};
+
 const parseTeamPlayers = (team) => {
     const clean = (value) => (typeof value === "string" ? value.trim() : "");
 
@@ -29,6 +35,49 @@ export default function StandingsTable({
     isTournamentOver,
     enableInternalScroll = false,
 }) {
+    const panelRef = React.useRef(null);
+    const [viewportHeight, setViewportHeight] = React.useState(() => getViewportHeight());
+    const [panelHeight, setPanelHeight] = React.useState(null);
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return undefined;
+
+        let frame = 0;
+        const syncViewport = () => {
+            if (frame) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+                const next = getViewportHeight();
+                setViewportHeight((prev) => (Math.abs(prev - next) < 0.5 ? prev : next));
+            });
+        };
+
+        syncViewport();
+        window.addEventListener("resize", syncViewport);
+        window.addEventListener("orientationchange", syncViewport);
+        window.visualViewport?.addEventListener("resize", syncViewport);
+        window.visualViewport?.addEventListener("scroll", syncViewport);
+
+        return () => {
+            window.removeEventListener("resize", syncViewport);
+            window.removeEventListener("orientationchange", syncViewport);
+            window.visualViewport?.removeEventListener("resize", syncViewport);
+            window.visualViewport?.removeEventListener("scroll", syncViewport);
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, []);
+
+    React.useLayoutEffect(() => {
+        if (!enableInternalScroll || !panelRef.current) {
+            setPanelHeight(null);
+            return;
+        }
+
+        const top = panelRef.current.getBoundingClientRect().top;
+        const nextHeight = Math.max(320, Math.round(Math.max(0, viewportHeight - top - 8)));
+        setPanelHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    }, [enableInternalScroll, viewportHeight, standings.length]);
+
     const knockoutLabel = qCount >= 4
         ? "Generate Semis + Final"
         : "Generate Grand Final";
@@ -46,12 +95,16 @@ export default function StandingsTable({
             className={enableInternalScroll ? "h-full min-h-0 flex flex-col" : ""}
         >
             <div
+                ref={panelRef}
                 className={`rounded-[2rem] relative overflow-hidden ${enableInternalScroll ? "flex-1 min-h-0 flex flex-col" : ""}`}
                 style={{
                     background: "linear-gradient(165deg, rgba(7,11,22,0.92), rgba(3,8,20,0.98) 58%, rgba(8,14,30,0.94))",
                     border: "1px solid rgba(120,132,156,0.16)",
                     backdropFilter: "blur(26px)",
                     boxShadow: "0 18px 36px rgba(0,0,0,0.44), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -18px 24px rgba(2,6,23,0.3)",
+                    ...(enableInternalScroll && panelHeight
+                        ? { height: `${panelHeight}px`, minHeight: "320px" }
+                        : {}),
                 }}
             >
                 <div className="absolute inset-0 pointer-events-none">
@@ -119,7 +172,15 @@ export default function StandingsTable({
 
                 <div
                     className={`relative z-10 px-3 pb-3 ${enableInternalScroll ? "flex-1 min-h-0 overflow-y-auto" : ""}`}
-                    style={enableInternalScroll ? { scrollbarWidth: "none", WebkitOverflowScrolling: "touch", touchAction: "pan-y" } : undefined}
+                    style={enableInternalScroll
+                        ? {
+                            scrollbarWidth: "none",
+                            WebkitOverflowScrolling: "touch",
+                            touchAction: "pan-y",
+                            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+                            overscrollBehavior: "contain",
+                        }
+                        : undefined}
                 >
                     {standings.map((team, idx) => {
                         const players = parseTeamPlayers(team);
